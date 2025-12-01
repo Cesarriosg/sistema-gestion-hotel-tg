@@ -1,56 +1,112 @@
-import { Container, Nav, Navbar, Button } from "react-bootstrap";
+// src/layouts/MainLayout.jsx
+import { Container, Nav, Navbar, NavDropdown, Button } from "react-bootstrap";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Link } from "react-router-dom";
-import { FaBed, FaUsers, FaDoorOpen, FaFileInvoice, FaCogs, FaUserShield } from "react-icons/fa";
 
 export default function MainLayout({ children }) {
   const { usuario, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/"); // volver al login
+  };
+
+  const isAdmin = usuario?.rol === "admin";
 
   return (
-    <div className="d-flex" style={{ minHeight: "100vh" }}>
+    <div className="d-flex flex-column" style={{ minHeight: "100vh" }}>
+      {/* Barra superior tipo Zeus */}
+      <Navbar bg="primary" variant="dark" expand="lg">
+        <Container fluid>
+          <Navbar.Brand as={Link} to="/calendario">
+            🏨 Hotel Manager
+          </Navbar.Brand>
 
-      {/* Sidebar */}
-      <div className="bg-dark text-white p-3" style={{ width: "250px" }}>
-        <h4 className="text-center mb-4">🏨 Hotel Manager</h4>
+          <Navbar.Toggle aria-controls="main-navbar" />
+          <Navbar.Collapse id="main-navbar">
+            <Nav className="me-auto">
 
-        <Nav className="flex-column gap-2">
+              {/* Menú Reservas */}
+              <NavDropdown title="Reservas" id="nav-reservas">
+                <NavDropdown.Item as={Link} to="/calendario">
+                  Rack interactivo
+                </NavDropdown.Item>
+                <NavDropdown.Item as={Link} to="/reservas">
+                  Calendario de reservas
+                </NavDropdown.Item>
+                <NavDropdown.Divider />
+                <NavDropdown.Item as={Link} to="/reservas/nueva">
+                  Crear reserva individual
+                </NavDropdown.Item>
+              </NavDropdown>
 
-          <Link className="nav-link text-white" to="/reservas"><FaBed /> Gestión de Reservas</Link>
-          <Link className="nav-link text-white" to="/huespedes"><FaUsers /> Huéspedes</Link>
-          <Link className="nav-link text-white" to="/habitaciones"><FaDoorOpen /> Habitaciones</Link>
-          <Link className="nav-link text-white" to="/facturacion"><FaFileInvoice /> Facturación</Link>
+              {/* Menú Recepción */}
+              <NavDropdown title="Recepción" id="nav-recepcion">
+                <NavDropdown.Item as={Link} to="/walkin/nuevo">
+                  Registro Walk-In
+                </NavDropdown.Item>
+                <NavDropdown.Item as={Link} to="/checkin/pendientes">
+                  Huéspedes Check-In (pendiente)
+                </NavDropdown.Item>
+              </NavDropdown>
 
-          {/* Opciones SOLO para Admin */}
-          {usuario?.rol === "admin" && (
-            <>
-              <hr className="text-light" />
-              <Link className="nav-link text-white" to="/configuracion"><FaCogs /> Configuración</Link>
-              <Link className="nav-link text-white" to="/usuarios"><FaUserShield /> Gestión de Usuarios</Link>
-            </>
-          )}
-        </Nav>
-      </div>
+              {/* Menú Auditoría (placeholder) */}
+              <NavDropdown title="Auditoría" id="nav-auditoria">
+                <NavDropdown.Item disabled>
+                  Cargos a folios (pendiente)
+                </NavDropdown.Item>
+              </NavDropdown>
 
-      {/* Main Content */}
-      <div className="flex-grow-1 d-flex flex-column">
+              {/* Menú Ama de Llaves (placeholder) */}
+              <NavDropdown title="Ama de Llaves" id="nav-ama">
+                <NavDropdown.Item as={Link} to="/habitaciones">
+                  Estado de habitaciones
+                </NavDropdown.Item>
+              </NavDropdown>
 
-        {/* Navbar Superior */}
-        <Navbar bg="light" className="shadow-sm px-3">
-          <Navbar.Text className="me-auto">
-            Bienvenido, <strong>{usuario?.nombre}</strong>
-          </Navbar.Text>
+              {/* Menú Facturación */}
+              <Nav.Link as={Link} to="/facturacion">
+                Facturación
+              </Nav.Link>
 
-          <Button variant="outline-danger" onClick={logout}>
-            Cerrar sesión
-          </Button>
-        </Navbar>
+              {/* Opciones solo Admin */}
+              {isAdmin && (
+                <>
+                  <NavDropdown title="Administración" id="nav-admin">
+                    <NavDropdown.Item as={Link} to="/panel">
+                      Panel administrador
+                    </NavDropdown.Item>
+                    <NavDropdown.Item as={Link} to="/configuracion">
+                      Configuración
+                    </NavDropdown.Item>
+                    <NavDropdown.Item as={Link} to="/usuarios">
+                      Gestión de usuarios
+                    </NavDropdown.Item>
+                  </NavDropdown>
+                </>
+              )}
+            </Nav>
 
-        {/* Contenido dinámico */}
-        <Container fluid className="p-4">
-          {children}
+            {/* Usuario + Cerrar sesión */}
+            <div className="d-flex align-items-center gap-3">
+              <span className="text-white">
+                {usuario
+                  ? `Bienvenido, ${usuario.email} (${usuario.rol})`
+                  : "No autenticado"}
+              </span>
+              <Button variant="outline-light" size="sm" onClick={handleLogout}>
+                Cerrar sesión
+              </Button>
+            </div>
+          </Navbar.Collapse>
         </Container>
-        <Link className="nav-link text-white" to="/calendario">🗓️ Calendario</Link>
-      </div>
+      </Navbar>
+
+      {/* Contenido de la página */}
+      <Container fluid className="p-4 flex-grow-1 bg-light">
+        {children}
+      </Container>
     </div>
   );
 }

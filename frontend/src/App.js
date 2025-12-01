@@ -1,50 +1,142 @@
+// src/App.js
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+
 import Login from "./pages/Login";
 import Panel from "./pages/Panel";
 import MainLayout from "./layouts/MainLayout";
-//import PrivateRoute from "./components/PrivateRoute";
 import PrivateRoute from "./routes/PrivateRoute";
+
 import CalendarioReservas from "./pages/CalendarioReservas";
 import CalendarioRack from "./pages/CalendarioRack";
 import CheckIn from "./pages/CheckIn";
 import NuevaReserva from "./pages/NuevaReserva";
 import NuevoWalkIn from "./pages/NuevoWalkIn";
 
-
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-
+        {/* RUTAS PÚBLICAS */}
         <Route path="/" element={<Login />} />
-        <Route path="/rack" element={< PrivateRoute > <Panel /> </PrivateRoute>} />
-        <Route path="/calendario" element={<CalendarioRack />} />
-        <Route path="/panel" element={< PrivateRoute > <Panel /> </PrivateRoute>} />
-        <Route path="/checkin/:id" element={<CheckIn />} />
+        <Route path="/login" element={<Login />} />
 
-        <Route path="/reservas/nueva" element={<NuevaReserva />} />
-        <Route path="/walkin/nuevo" element={<NuevoWalkIn />} />
+        {/* RACK / CALENDARIO = PANTALLA PRINCIPAL LUEGO DE LOGIN */}
+        <Route
+          path="/calendario"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <CalendarioRack />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
 
-         {/* <Route path="/reservas/:id" element={<DetalleReserva />} /> */}
+        {/* PANEL ADMIN (ejemplo de ruta solo admin) */}
+        <Route
+          path="/panel"
+          element={
+            <PrivateRoute roles={["admin"]}>
+              <MainLayout>
+                <Panel />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
 
+        {/* RESERVAS (lista o calendario de reservas) */}
+        <Route
+          path="/reservas"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <CalendarioReservas />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
 
-        <Route path="/reservas" element={<PrivateRoute><MainLayout>Gestión de reservas</MainLayout></PrivateRoute>} />
-        <Route path="/huespedes" element={<PrivateRoute><MainLayout>Huéspedes</MainLayout></PrivateRoute>} />
-        <Route path="/habitaciones" element={<PrivateRoute><MainLayout>Habitaciones</MainLayout></PrivateRoute>} />
-        <Route path="/facturacion" element={<PrivateRoute><MainLayout>Facturación</MainLayout></PrivateRoute>} />
+        {/* NUEVA RESERVA Y WALK-IN */}
+        <Route
+          path="/reservas/nueva"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <NuevaReserva />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
 
-        {/* Calendario */}
-        <Route path="/calendario" element={<PrivateRoute><CalendarioReservas /></PrivateRoute>} />
+        <Route
+          path="/walkin/nuevo"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <NuevoWalkIn />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
 
-        <Route path="/calendario" element={<CalendarioRack />} />
+        {/* CHECK-IN (por id de reserva) */}
+        <Route
+          path="/checkin/:id"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <CheckIn />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
 
-        <Route path="/calendario" element={<CalendarioReservas />} />
+        {/* MÓDULOS GENERALES */}
+        <Route
+          path="/huespedes"
+          element={
+            <PrivateRoute>
+              <MainLayout>Huéspedes (pendiente de página)</MainLayout>
+            </PrivateRoute>
+          }
+        />
 
+        <Route
+          path="/habitaciones"
+          element={
+            <PrivateRoute>
+              <MainLayout>Habitaciones (pendiente de página)</MainLayout>
+            </PrivateRoute>
+          }
+        />
 
-        {/* Rutas solo admin */}
-        <Route path="/configuracion" element={<PrivateRoute><MainLayout>Configuración</MainLayout></PrivateRoute>} />
-        <Route path="/usuarios" element={<PrivateRoute><MainLayout>Gestión de Usuarios</MainLayout></PrivateRoute>} />
+        <Route
+          path="/facturacion"
+          element={
+            <PrivateRoute>
+              <MainLayout>Facturación (pendiente de página)</MainLayout>
+            </PrivateRoute>
+          }
+        />
 
+        {/* SOLO ADMIN */}
+        <Route
+          path="/configuracion"
+          element={
+            <PrivateRoute roles={["admin"]}>
+              <MainLayout>Configuración</MainLayout>
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/usuarios"
+          element={
+            <PrivateRoute roles={["admin"]}>
+              <MainLayout>Gestión de Usuarios</MainLayout>
+            </PrivateRoute>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );

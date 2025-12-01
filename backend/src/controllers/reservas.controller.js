@@ -63,7 +63,9 @@ export const obtenerReserva = async (req, res) => {
       LIMIT 1
     `;
     const { rows } = await pool.query(q, [id]);
-    if (!rows.length) return res.status(404).json({ message: "Reserva no encontrada." });
+    if (!rows.length) {
+      return res.status(404).json({ message: "Reserva no encontrada." });
+    }
     res.json(rows[0]);
   } catch (e) {
     console.error("obtenerReserva error:", e);
@@ -87,17 +89,20 @@ export const getCalendarioReservas = async (_req, res) => {
       FROM reservas r
       JOIN habitaciones h ON h.id = r.habitacion_id
       LEFT JOIN huespedes hu ON hu.id = r.huesped_id
+      WHERE r.estado IN ('reservada', 'ocupada')
       ORDER BY r.fecha_inicio ASC, h.numero ASC
     `;
     const { rows } = await pool.query(q);
     res.json(rows);
   } catch (e) {
     console.error("getCalendarioReservas error:", e);
-    res.status(500).json({ message: "Error al obtener reservas para el calendario." });
+    res
+      .status(500)
+      .json({ message: "Error al obtener reservas para el calendario." });
   }
 };
 
-// Alias por si en alguna parte del código usabas este nombre antiguo.
+// Alias por compatibilidad con código viejo
 export const obtenerReservasCalendario = getCalendarioReservas;
 
 /**
@@ -126,6 +131,8 @@ export const crearReservaOWalkIn = async (req, res) => {
     huesped_telefono = null,
   } = req.body;
 
+  console.log("crearReservaOWalkIn body:", req.body);
+
   if (!tipo || !habitacion_numero || !fecha_inicio || !fecha_fin || !huesped_nombre) {
     return res.status(400).json({ message: "Datos incompletos." });
   }
@@ -145,7 +152,7 @@ export const crearReservaOWalkIn = async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    // Buscar habitación por número
+    // 1. Buscar habitación por número
     const hq = await client.query(
       "SELECT id FROM habitaciones WHERE numero = $1 LIMIT 1",
       [habitacion_numero]
@@ -156,7 +163,7 @@ export const crearReservaOWalkIn = async (req, res) => {
     }
     const habitacionId = hq.rows[0].id;
 
-    // Validar choque de rangos
+    // 2. Validar choque de rangos
     const choca = await rangoChoca(client, habitacionId, desde, hasta);
     if (choca) {
       await client.query("ROLLBACK");
@@ -165,34 +172,40 @@ export const crearReservaOWalkIn = async (req, res) => {
       });
     }
 
-    // Buscar o crear huésped
+    // 3. Buscar o crear huésped
     let huespedId = null;
+
     if (huesped_documento) {
       const { rows } = await client.query(
         "SELECT id FROM huespedes WHERE documento = $1 LIMIT 1",
         [huesped_documento]
       );
-      if (rows.length) huespedId = rows[0].id;
+      if (rows.length) {
+        huespedId = rows[0].id;
+      }
     }
+
     if (!huespedId) {
-      const ins = await client.query(
+      const insHu = await client.query(
         "INSERT INTO huespedes (nombre, documento, telefono) VALUES ($1, $2, $3) RETURNING id",
         [huesped_nombre, huesped_documento, huesped_telefono]
       );
-      huespedId = ins.rows[0].id;
+      huespedId = insHu.rows[0].id;
     }
 
-    // Estado inicial
+    // 4. Estado inicial
     let estado = "reservada";
     let checkin_at = null;
 
     if (tipo === "walkin") {
       // Validar que sea el día operativo (fecha_sistema)
       const cfg = await client.query(
-        "SELECT valor FROM config WHERE clave = 'fecha_sistema' LIMIT 1"
-      );
-      const fechaSistema =
-        cfg.rows?.[0]?.valor || dayjs().format("YYYY-MM-DD");
+  "SELECT fecha_sistema FROM configuracion LIMIT 1"
+);
+
+const fechaSistema =
+  dayjs(cfg.rows?.[0]?.fecha_sistema).format("YYYY-MM-DD");
+
 
       if (fechaSistema !== desde) {
         await client.query("ROLLBACK");
@@ -206,6 +219,7 @@ export const crearReservaOWalkIn = async (req, res) => {
       checkin_at = dayjs().toDate();
     }
 
+    // 5. Insertar la reserva
     const insR = await client.query(
       `INSERT INTO reservas
          (fecha_inicio, fecha_fin, estado, notas,
@@ -231,8 +245,6 @@ export const crearReserva = crearReservaOWalkIn;
 
 /**
  * PUT /api/reservas/:id
- * Actualiza fechas / estado / notas de una reserva.
- * (NO se usa para check-in/check-out; eso tiene endpoints propios).
  */
 export const actualizarReserva = async (req, res) => {
   const { id } = req.params;
@@ -255,7 +267,9 @@ export const actualizarReserva = async (req, res) => {
       RETURNING *
     `;
     const { rows } = await pool.query(q, [desde, hasta, estado, notas, id]);
-    if (!rows.length) return res.status(404).json({ message: "Reserva no encontrada." });
+    if (!rows.length) {
+      return res.status(404).json({ message: "Reserva no encontrada." });
+    }
     res.json(rows[0]);
   } catch (e) {
     console.error("actualizarReserva error:", e);
@@ -265,7 +279,7 @@ export const actualizarReserva = async (req, res) => {
 
 /**
  * DELETE /api/reservas/:id
- * Lógicamente la marcamos como cancelada.
+ * Lógica: marcar como cancelada.
  */
 export const cancelarReserva = async (req, res) => {
   const { id } = req.params;
@@ -278,7 +292,9 @@ export const cancelarReserva = async (req, res) => {
       RETURNING *
     `;
     const { rows } = await pool.query(q, [id]);
-    if (!rows.length) return res.status(404).json({ message: "Reserva no encontrada." });
+    if (!rows.length) {
+      return res.status(404).json({ message: "Reserva no encontrada." });
+    }
     res.json(rows[0]);
   } catch (e) {
     console.error("cancelarReserva error:", e);
@@ -313,10 +329,11 @@ export const checkinReserva = async (req, res) => {
 
     // validar fecha_sistema ∈ [fecha_inicio, fecha_fin)
     const cfg = await client.query(
-      "SELECT valor FROM config WHERE clave = 'fecha_sistema' LIMIT 1"
-    );
-    const fechaSistema =
-      cfg.rows?.[0]?.valor || dayjs().format("YYYY-MM-DD");
+  "SELECT fecha_sistema FROM configuracion LIMIT 1"
+);
+
+const fechaSistema =
+  dayjs(cfg.rows?.[0]?.fecha_sistema).format("YYYY-MM-DD");
 
     const hoy = dayjs(fechaSistema);
     if (
@@ -356,28 +373,73 @@ export const checkinReserva = async (req, res) => {
  */
 export const checkoutReserva = async (req, res) => {
   const { id } = req.params;
+  const client = await pool.connect();
 
   try {
-    const q = `
-      UPDATE reservas
-      SET estado = 'finalizada',
-          checkout_at = NOW(),
-          updated_at = NOW()
-      WHERE id = $1
-      RETURNING *
-    `;
-    const { rows } = await pool.query(q, [id]);
-    if (!rows.length) return res.status(404).json({ message: "Reserva no encontrada." });
-    res.json(rows[0]);
+    await client.query("BEGIN");
+
+    const { rows } = await client.query(
+      "SELECT fecha_inicio, fecha_fin, estado FROM reservas WHERE id = $1 FOR UPDATE",
+      [id]
+    );
+
+    if (!rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Reserva no encontrada." });
+    }
+
+    const reserva = rows[0];
+
+    if (reserva.estado !== "ocupada") {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        message: "Solo se puede hacer check-out de reservas ocupadas.",
+      });
+    }
+
+    // Validar fecha_sistema (opcional pero elegante)
+    const cfg = await client.query(
+      "SELECT fecha_sistema FROM configuracion LIMIT 1"
+    );
+    const fechaSistema = dayjs(cfg.rows?.[0]?.fecha_sistema).format(
+      "YYYY-MM-DD"
+    );
+    const hoy = dayjs(fechaSistema);
+
+    // No permitir checkout antes del día siguiente al check-in teórico
+    const fechaMinCheckout = dayjs(reserva.fecha_inicio).add(1, "day");
+    if (hoy.isBefore(fechaMinCheckout, "day")) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        message:
+          "El check-out solo se puede realizar a partir del día siguiente a la llegada.",
+      });
+    }
+
+    const upd = await client.query(
+      `UPDATE reservas
+       SET estado = 'finalizada',
+           checkout_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [id]
+    );
+
+    await client.query("COMMIT");
+    res.json(upd.rows[0]);
   } catch (e) {
+    await client.query("ROLLBACK");
     console.error("checkoutReserva error:", e);
     res.status(500).json({ message: "Error al hacer check-out." });
+  } finally {
+    client.release();
   }
 };
 
+
 /**
  * GET /api/reservas/:id/checkin/data
- * (Si lo usas para mostrar datos en el modal de check-in.)
  */
 export const obtenerDatosCheckIn = async (req, res) => {
   const { id } = req.params;
@@ -398,10 +460,14 @@ export const obtenerDatosCheckIn = async (req, res) => {
       LIMIT 1
     `;
     const { rows } = await pool.query(q, [id]);
-    if (!rows.length) return res.status(404).json({ message: "Reserva no encontrada." });
+    if (!rows.length) {
+      return res.status(404).json({ message: "Reserva no encontrada." });
+    }
     res.json(rows[0]);
   } catch (e) {
     console.error("obtenerDatosCheckIn error:", e);
-    res.status(500).json({ message: "Error al obtener datos de check-in." });
+    res
+      .status(500)
+      .json({ message: "Error al obtener datos de check-in." });
   }
 };

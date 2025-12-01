@@ -1,9 +1,12 @@
+// src/pages/Login.jsx
 import { useState } from "react";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -12,23 +15,26 @@ export default function Login() {
     e.preventDefault();
     setError("");
 
-    try {
-      const res = await axios.post("http://localhost:4000/api/auth/login", {
-        email,
-        password,
-      });
+    const ok = await login(email, password);
 
-      localStorage.setItem("token", res.data.token);
-      localStorage.setItem("rol", res.data.rol);
-
-      navigate("/panel"); // redirige al panel principal
-    } catch (err) {
+    if (ok) {
+      // LUEGO DE LOGIN → AL RACK / CALENDARIO
+      navigate("/calendario");
+    } else {
       setError("Credenciales incorrectas");
     }
   };
 
   return (
-    <div style={{ maxWidth: "380px", margin: "80px auto", padding: "20px", border: "1px solid #ddd", borderRadius: "8px" }}>
+    <div
+      style={{
+        maxWidth: "380px",
+        margin: "80px auto",
+        padding: "20px",
+        border: "1px solid #ddd",
+        borderRadius: "8px",
+      }}
+    >
       <h2 style={{ textAlign: "center" }}>Inicio de Sesión</h2>
 
       <form onSubmit={handleLogin}>
@@ -52,7 +58,11 @@ export default function Login() {
 
         {error && <p style={{ color: "red", marginTop: "8px" }}>{error}</p>}
 
-        <button type="submit" className="btn btn-primary w-100" style={{ marginTop: "15px" }}>
+        <button
+          type="submit"
+          className="btn btn-primary w-100"
+          style={{ marginTop: "15px" }}
+        >
           Ingresar
         </button>
       </form>
