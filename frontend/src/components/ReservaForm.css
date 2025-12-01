@@ -1,0 +1,27 @@
+.reserva-form-container {
+  margin-top: 10px;
+}
+
+.reserva-form-container h3 {
+  margin-bottom: 12px;
+  text-align: center;
+  color: #1f3b55;
+}
+
+.reserva-form-container form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reserva-form-container input {
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.error {
+  color: red;
+  font-size: 13px;
+  text-align: center;
+}

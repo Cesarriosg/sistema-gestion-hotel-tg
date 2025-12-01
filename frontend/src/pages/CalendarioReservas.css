@@ -1,0 +1,27 @@
+/* CalendarioReservas.css */
+
+.fc {
+  font-family: sans-serif;
+}
+
+.fc .fc-toolbar-title {
+  font-size: 1.3rem;
+  font-weight: bold;
+}
+
+.fc .fc-resource-timeline {
+  border: 1px solid #ddd;
+  background: #fff;
+}
+
+.fc .fc-timeline-event {
+  border-radius: 6px;
+  padding: 4px;
+  font-size: 0.85rem;
+  color: #fff;
+}
+
+.fc .fc-resource-cell {
+  font-weight: 600;
+  padding-left: 8px;
+}

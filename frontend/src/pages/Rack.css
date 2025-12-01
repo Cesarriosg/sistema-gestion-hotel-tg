@@ -1,0 +1,35 @@
+.rack-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
+  margin-top: 20px;
+}
+
+.rack-item {
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+/* ESTADOS */
+.rack-item.disponible {
+  background-color: #28a745; /* Verde */
+}
+
+.rack-item.reservada {
+  background-color: #ffc107; /* Amarillo */
+  color: #333;
+}
+
+.rack-item.ocupada,
+.rack-item.en_estancia {
+  background-color: #dc3545; /* Rojo */
+}
+
+.rack-item:hover {
+  transform: scale(1.05);
+}
