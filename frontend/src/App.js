@@ -6,21 +6,27 @@ import Panel from "./pages/Panel";
 import MainLayout from "./layouts/MainLayout";
 import PrivateRoute from "./routes/PrivateRoute";
 
-import CalendarioReservas from "./pages/CalendarioReservas";
 import CalendarioRack from "./pages/CalendarioRack";
 import CheckIn from "./pages/CheckIn";
 import NuevaReserva from "./pages/NuevaReserva";
 import NuevoWalkIn from "./pages/NuevoWalkIn";
+import Reservas from "./pages/Reservas";
+import DetalleReserva from "./pages/DetalleReserva";
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* ===================== */}
         {/* RUTAS PÚBLICAS */}
+        {/* ===================== */}
         <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
 
-        {/* RACK / CALENDARIO = PANTALLA PRINCIPAL LUEGO DE LOGIN */}
+
+        {/* ===================== */}
+        {/* RACK / PANTALLA PRINCIPAL */}
+        {/* ===================== */}
         <Route
           path="/calendario"
           element={
@@ -32,7 +38,10 @@ export default function App() {
           }
         />
 
-        {/* PANEL ADMIN (ejemplo de ruta solo admin) */}
+
+        {/* ===================== */}
+        {/* PANEL SOLO ADMIN */}
+        {/* ===================== */}
         <Route
           path="/panel"
           element={
@@ -44,19 +53,38 @@ export default function App() {
           }
         />
 
-        {/* RESERVAS (lista o calendario de reservas) */}
+
+        {/* ===================== */}
+        {/* RESERVAS */}
+        {/* ===================== */}
+        {/* LISTADO DE RESERVAS */}
         <Route
           path="/reservas"
           element={
             <PrivateRoute>
               <MainLayout>
-                <CalendarioReservas />
+                <Reservas />
               </MainLayout>
             </PrivateRoute>
           }
         />
 
-        {/* NUEVA RESERVA Y WALK-IN */}
+        {/* DETALLE DE RESERVA (VER REGISTRO) */}
+        <Route
+          path="/reservas/:id"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <DetalleReserva />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
+
+        {/* ===================== */}
+        {/* NUEVA RESERVA / WALK-IN */}
+        {/* ===================== */}
         <Route
           path="/reservas/nueva"
           element={
@@ -79,7 +107,10 @@ export default function App() {
           }
         />
 
-        {/* CHECK-IN (por id de reserva) */}
+
+        {/* ===================== */}
+        {/* CHECK-IN */}
+        {/* ===================== */}
         <Route
           path="/checkin/:id"
           element={
@@ -91,7 +122,10 @@ export default function App() {
           }
         />
 
+
+        {/* ===================== */}
         {/* MÓDULOS GENERALES */}
+        {/* ===================== */}
         <Route
           path="/huespedes"
           element={
@@ -110,6 +144,10 @@ export default function App() {
           }
         />
 
+
+        {/* ===================== */}
+        {/* FACTURACIÓN */}
+        {/* ===================== */}
         <Route
           path="/facturacion"
           element={
@@ -119,7 +157,10 @@ export default function App() {
           }
         />
 
+
+        {/* ===================== */}
         {/* SOLO ADMIN */}
+        {/* ===================== */}
         <Route
           path="/configuracion"
           element={

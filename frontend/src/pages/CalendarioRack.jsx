@@ -67,7 +67,7 @@ export default function CalendarioRack() {
           resourceId: r.habitacion_numero,
           title: r.huesped_nombre,
           start: r.fecha_inicio,
-          end: r.fecha_fin, // rango [inicio, fin) => correcto para 1 noche
+          end: r.fecha_fin, // rango [inicio, fin)
           display: "block",
           color:
             r.estado === "ocupada"
@@ -89,11 +89,7 @@ export default function CalendarioRack() {
   };
 
   const nowValue = useMemo(() => {
-    return dayjs(fechaSistema)
-      .hour(12)
-      .minute(0)
-      .second(0)
-      .toDate();
+    return dayjs(fechaSistema).hour(12).minute(0).second(0).toDate();
   }, [fechaSistema]);
 
   const esHoyDelSistema = (yymmdd) => yymmdd === fechaSistema;
@@ -131,13 +127,9 @@ export default function CalendarioRack() {
         );
         return;
       }
-      navigate(
-        `/walkin/nuevo?hab=${habNumero}&desde=${start}&hasta=${end}`
-      );
+      navigate(`/walkin/nuevo?hab=${habNumero}&desde=${start}&hasta=${end}`);
     } else if (accion === "reserva") {
-      navigate(
-        `/reservas/nueva?hab=${habNumero}&desde=${start}&hasta=${end}`
-      );
+      navigate(`/reservas/nueva?hab=${habNumero}&desde=${start}&hasta=${end}`);
     } else if (accion === "bloqueo_mantenimiento") {
       navigate(
         `/bloqueos/nuevo?tipo=mantenimiento&hab=${habNumero}&desde=${start}&hasta=${end}`
@@ -192,7 +184,7 @@ export default function CalendarioRack() {
     if (eventoSel.estado !== "ocupada") return false;
     const hoy = dayjs(fechaSistema);
     const inicio = dayjs(eventoSel.start);
-    // por simplicidad: permitir checkout desde el día siguiente al check-in
+    // permitir checkout desde el día siguiente al check-in
     return !hoy.isBefore(inicio.add(1, "day"), "day");
   })();
 
@@ -232,6 +224,13 @@ export default function CalendarioRack() {
       console.error("Error en check-out:", e);
       alert("No se pudo realizar el check-out.");
     }
+  };
+
+  const irVerRegistro = () => {
+    if (!eventoSel) return;
+    // Cerramos el modal y vamos a la pantalla de detalle
+    setShowEventModal(false);
+    navigate(`/reservas/${eventoSel.id}`);
   };
 
   return (
@@ -406,6 +405,15 @@ export default function CalendarioRack() {
               disabled={!puedeCancelar}
             >
               Cancelar reserva
+            </Button>
+
+            {/* 🔹 Nuevo botón: Ver registro completo de la reserva */}
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              onClick={irVerRegistro}
+            >
+              Ver registro
             </Button>
           </div>
 

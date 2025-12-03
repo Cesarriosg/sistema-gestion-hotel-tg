@@ -471,3 +471,165 @@ export const obtenerDatosCheckIn = async (req, res) => {
       .json({ message: "Error al obtener datos de check-in." });
   }
 };
+
+/**
+ * GET /api/reservas/:id/finanzas
+ * Devuelve reserva + pagos + factura + resumen.
+ */
+export const obtenerFinanzasReserva = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const rReserva = await pool.query(
+      `SELECT r.*,
+              h.numero AS habitacion_numero,
+              h.tipo   AS habitacion_tipo,
+              COALESCE(hu.nombre, '') AS huesped_nombre
+       FROM reservas r
+       JOIN habitaciones h ON h.id = r.habitacion_id
+       LEFT JOIN huespedes hu ON hu.id = r.huesped_id
+       WHERE r.id = $1
+       LIMIT 1`,
+      [id]
+    );
+
+    if (!rReserva.rows.length) {
+      return res.status(404).json({ message: "Reserva no encontrada." });
+    }
+    const reserva = rReserva.rows[0];
+
+    const rPagos = await pool.query(
+      `SELECT *
+       FROM pagos
+       WHERE reserva_id = $1
+       ORDER BY created_at ASC`,
+      [id]
+    );
+    const pagos = rPagos.rows;
+
+    const rFactura = await pool.query(
+      `SELECT *
+       FROM facturas
+       WHERE reserva_id = $1
+       LIMIT 1`,
+      [id]
+    );
+    const factura = rFactura.rows[0] || null;
+
+    const total_pagado = pagos.reduce(
+      (acc, p) => acc + Number(p.monto),
+      0
+    );
+
+    const total_facturado = factura ? Number(factura.total) : 0;
+
+    res.json({
+      reserva,
+      pagos,
+      factura,
+      resumen: {
+        total_pagado,
+        total_facturado,
+        saldo: total_facturado - total_pagado,
+      },
+    });
+  } catch (e) {
+    console.error("obtenerFinanzasReserva error:", e);
+    res.status(500).json({ message: "Error al obtener finanzas de la reserva." });
+  }
+};
+
+/**
+ * POST /api/reservas/:id/facturar
+ * Crea una factura si la reserva está finalizada y tiene pagos.
+ */
+export const facturarReserva = async (req, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const rRes = await client.query(
+      "SELECT * FROM reservas WHERE id = $1 FOR UPDATE",
+      [id]
+    );
+    if (!rRes.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Reserva no encontrada." });
+    }
+    const reserva = rRes.rows[0];
+
+    if (reserva.estado !== "finalizada") {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        message: "Solo se puede facturar una reserva finalizada (check-out).",
+      });
+    }
+
+    // Ver si ya tiene factura
+    const rFacturaPrev = await client.query(
+      "SELECT * FROM facturas WHERE reserva_id = $1 LIMIT 1",
+      [id]
+    );
+    if (rFacturaPrev.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ message: "La reserva ya tiene factura." });
+    }
+
+    // Pagos asociados
+    const rPagos = await client.query(
+      "SELECT * FROM pagos WHERE reserva_id = $1",
+      [id]
+    );
+    const pagos = rPagos.rows;
+    const total_pagado = pagos.reduce(
+      (acc, p) => acc + Number(p.monto),
+      0
+    );
+
+    if (total_pagado <= 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        message: "No hay pagos/de depósitos registrados. No se puede facturar.",
+      });
+    }
+
+    // Por ahora, asumimos que el total de la factura = total pagado
+    const total_factura = total_pagado;
+
+    const numero = `F-${dayjs().format("YYYYMMDD")}-${id}`;
+
+    const rFactura = await client.query(
+      `INSERT INTO facturas (reserva_id, numero, total)
+       VALUES ($1,$2,$3)
+       RETURNING *`,
+      [id, numero, total_factura]
+    );
+    const factura = rFactura.rows[0];
+
+    // Detalle básico (alojamiento)
+    await client.query(
+      `INSERT INTO factura_detalle
+        (factura_id, descripcion, cantidad, valor_unitario, valor_total)
+       VALUES ($1,$2,$3,$4,$5)`,
+      [
+        factura.id,
+        "Alojamiento y servicios de la reserva",
+        1,
+        total_factura,
+        total_factura,
+      ]
+    );
+
+    await client.query("COMMIT");
+    res.status(201).json({ factura });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error("facturarReserva error:", e);
+    res.status(500).json({ message: "Error al generar la factura." });
+  } finally {
+    client.release();
+  }
+};
+
