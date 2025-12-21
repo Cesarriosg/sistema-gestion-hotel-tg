@@ -10,6 +10,7 @@ import serviciosroutes from "./routes/servicios.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import configRoutes from "./routes/config.routes.js";
 import pagosRoutes from "./routes/pagos.routes.js";
+import facturacionRoutes from "./routes/facturacion.routes.js";
 
 
 dotenv.config();
@@ -33,6 +34,7 @@ app.use("/api/servicios-consumidos", serviciosroutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/config", configRoutes);
 app.use("/api/pagos", pagosRoutes);
+app.use("/api", facturacionRoutes);
 
 
 const PORT = process.env.PORT || 4000;

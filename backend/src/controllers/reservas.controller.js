@@ -55,7 +55,8 @@ export const obtenerReserva = async (req, res) => {
              h.tipo   AS habitacion_tipo,
              COALESCE(hu.nombre, '') AS huesped_nombre,
              hu.documento,
-             hu.telefono
+             hu.telefono,
+             hu.email
       FROM reservas r
       JOIN habitaciones h ON h.id = r.habitacion_id
       LEFT JOIN huespedes hu ON hu.id = r.huesped_id
@@ -63,9 +64,8 @@ export const obtenerReserva = async (req, res) => {
       LIMIT 1
     `;
     const { rows } = await pool.query(q, [id]);
-    if (!rows.length) {
+    if (!rows.length)
       return res.status(404).json({ message: "Reserva no encontrada." });
-    }
     res.json(rows[0]);
   } catch (e) {
     console.error("obtenerReserva error:", e);
@@ -89,7 +89,7 @@ export const getCalendarioReservas = async (_req, res) => {
       FROM reservas r
       JOIN habitaciones h ON h.id = r.habitacion_id
       LEFT JOIN huespedes hu ON hu.id = r.huesped_id
-      WHERE r.estado IN ('reservada', 'ocupada')
+      WHERE r.estado IN ('reservada','ocupada')
       ORDER BY r.fecha_inicio ASC, h.numero ASC
     `;
     const { rows } = await pool.query(q);
@@ -102,7 +102,7 @@ export const getCalendarioReservas = async (_req, res) => {
   }
 };
 
-// Alias por compatibilidad con código viejo
+// Alias por si en alguna parte del código usabas este nombre antiguo.
 export const obtenerReservasCalendario = getCalendarioReservas;
 
 /**
@@ -117,7 +117,8 @@ export const obtenerReservasCalendario = getCalendarioReservas;
  *   fecha_fin: "2025-11-12",
  *   huesped_nombre: "Juan Perez",
  *   huesped_documento?: "123",
- *   huesped_telefono?: "555..."
+ *   huesped_telefono?: "555...",
+ *   huesped_email?: "correo@..."
  * }
  */
 export const crearReservaOWalkIn = async (req, res) => {
@@ -129,9 +130,13 @@ export const crearReservaOWalkIn = async (req, res) => {
     huesped_nombre,
     huesped_documento = null,
     huesped_telefono = null,
+    huesped_email = null,
+    notas = null,
   } = req.body;
 
-  console.log("crearReservaOWalkIn body:", req.body);
+   if (!["reserva", "walkin"].includes(tipo)) {
+    return res.status(400).json({ message: "Tipo inválido. Use 'reserva' o 'walkin'." });
+  }
 
   if (!tipo || !habitacion_numero || !fecha_inicio || !fecha_fin || !huesped_nombre) {
     return res.status(400).json({ message: "Datos incompletos." });
@@ -152,7 +157,7 @@ export const crearReservaOWalkIn = async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    // 1. Buscar habitación por número
+    // Buscar habitación por número
     const hq = await client.query(
       "SELECT id FROM habitaciones WHERE numero = $1 LIMIT 1",
       [habitacion_numero]
@@ -163,7 +168,7 @@ export const crearReservaOWalkIn = async (req, res) => {
     }
     const habitacionId = hq.rows[0].id;
 
-    // 2. Validar choque de rangos
+    // Validar choque de rangos
     const choca = await rangoChoca(client, habitacionId, desde, hasta);
     if (choca) {
       await client.query("ROLLBACK");
@@ -172,40 +177,35 @@ export const crearReservaOWalkIn = async (req, res) => {
       });
     }
 
-    // 3. Buscar o crear huésped
+    // Buscar o crear huésped
     let huespedId = null;
-
     if (huesped_documento) {
       const { rows } = await client.query(
         "SELECT id FROM huespedes WHERE documento = $1 LIMIT 1",
         [huesped_documento]
       );
-      if (rows.length) {
-        huespedId = rows[0].id;
-      }
+      if (rows.length) huespedId = rows[0].id;
     }
-
     if (!huespedId) {
-      const insHu = await client.query(
-        "INSERT INTO huespedes (nombre, documento, telefono) VALUES ($1, $2, $3) RETURNING id",
-        [huesped_nombre, huesped_documento, huesped_telefono]
+      const ins = await client.query(
+        "INSERT INTO huespedes (nombre, documento, telefono, email) VALUES ($1, $2, $3, $4) RETURNING id",
+        [huesped_nombre, huesped_documento, huesped_telefono, huesped_email]
       );
-      huespedId = insHu.rows[0].id;
+      huespedId = ins.rows[0].id;
     }
 
-    // 4. Estado inicial
+    // Estado inicial
     let estado = "reservada";
     let checkin_at = null;
 
     if (tipo === "walkin") {
       // Validar que sea el día operativo (fecha_sistema)
       const cfg = await client.query(
-  "SELECT fecha_sistema FROM configuracion LIMIT 1"
-);
-
-const fechaSistema =
-  dayjs(cfg.rows?.[0]?.fecha_sistema).format("YYYY-MM-DD");
-
+        "SELECT fecha_sistema FROM configuracion LIMIT 1"
+      );
+      const fechaSistema = dayjs(
+        cfg.rows?.[0]?.fecha_sistema || new Date()
+      ).format("YYYY-MM-DD");
 
       if (fechaSistema !== desde) {
         await client.query("ROLLBACK");
@@ -219,14 +219,13 @@ const fechaSistema =
       checkin_at = dayjs().toDate();
     }
 
-    // 5. Insertar la reserva
     const insR = await client.query(
       `INSERT INTO reservas
          (fecha_inicio, fecha_fin, estado, notas,
           huesped_id, habitacion_id, checkin_at, checkout_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        RETURNING id`,
-      [desde, hasta, estado, null, huespedId, habitacionId, checkin_at, null]
+      [desde, hasta, estado, notas, huespedId, habitacionId, checkin_at, null]
     );
 
     await client.query("COMMIT");
@@ -245,62 +244,184 @@ export const crearReserva = crearReservaOWalkIn;
 
 /**
  * PUT /api/reservas/:id
+ * Actualiza fechas / estado / notas de una reserva.
  */
 export const actualizarReserva = async (req, res) => {
   const { id } = req.params;
-  const { fecha_inicio, fecha_fin, estado, notas } = req.body;
+  const reservaId = Number(id);
 
+  const {
+    fecha_inicio,
+    fecha_fin,
+    estado,
+    notas,
+    habitacion_numero, // ✅ opcional: permitir cambiar habitación por número
+  } = req.body;
+
+  if (!reservaId || Number.isNaN(reservaId)) {
+    return res.status(400).json({ message: "ID de reserva inválido." });
+  }
+
+  const client = await pool.connect();
   try {
-    const desde = fecha_inicio
-      ? dayjs(fecha_inicio).format("YYYY-MM-DD")
-      : null;
-    const hasta = fecha_fin ? dayjs(fecha_fin).format("YYYY-MM-DD") : null;
+    await client.query("BEGIN");
 
-    const q = `
-      UPDATE reservas
-      SET fecha_inicio = COALESCE($1, fecha_inicio),
-          fecha_fin    = COALESCE($2, fecha_fin),
-          estado       = COALESCE($3, estado),
-          notas        = COALESCE($4, notas),
-          updated_at   = NOW()
-      WHERE id = $5
-      RETURNING *
-    `;
-    const { rows } = await pool.query(q, [desde, hasta, estado, notas, id]);
-    if (!rows.length) {
+    // 1) Traer reserva actual con lock
+    const r0 = await client.query(
+      `SELECT id, habitacion_id, fecha_inicio, fecha_fin, estado
+       FROM reservas
+       WHERE id = $1
+       FOR UPDATE`,
+      [reservaId]
+    );
+    if (!r0.rows.length) {
+      await client.query("ROLLBACK");
       return res.status(404).json({ message: "Reserva no encontrada." });
     }
-    res.json(rows[0]);
+    const actual = r0.rows[0];
+
+    // 2) Resolver nueva habitación (si mandan habitacion_numero)
+    let nuevaHabitacionId = actual.habitacion_id;
+    if (habitacion_numero) {
+      const hq = await client.query(
+        "SELECT id FROM habitaciones WHERE numero = $1 LIMIT 1",
+        [habitacion_numero]
+      );
+      if (!hq.rows.length) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Habitación no existe." });
+      }
+      nuevaHabitacionId = hq.rows[0].id;
+    }
+
+    // 3) Resolver nuevas fechas
+    const nuevoDesde = fecha_inicio
+      ? dayjs(fecha_inicio).format("YYYY-MM-DD")
+      : dayjs(actual.fecha_inicio).format("YYYY-MM-DD");
+
+    const nuevoHasta = fecha_fin
+      ? dayjs(fecha_fin).format("YYYY-MM-DD")
+      : dayjs(actual.fecha_fin).format("YYYY-MM-DD");
+
+    if (
+      !dayjs(nuevoDesde).isValid() ||
+      !dayjs(nuevoHasta).isValid() ||
+      !dayjs(nuevoHasta).isAfter(nuevoDesde)
+    ) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ message: "Rango de fechas inválido." });
+    }
+
+    // 4) Si cambian fechas/habitación, validar choque excluyendo esta reserva
+    const cambiaAlgo =
+      nuevaHabitacionId !== actual.habitacion_id ||
+      nuevoDesde !== dayjs(actual.fecha_inicio).format("YYYY-MM-DD") ||
+      nuevoHasta !== dayjs(actual.fecha_fin).format("YYYY-MM-DD");
+
+    if (cambiaAlgo) {
+      const qChoca = `
+        SELECT 1
+        FROM reservas
+        WHERE habitacion_id = $1
+          AND id <> $2
+          AND estado <> 'cancelada'
+          AND daterange(fecha_inicio, fecha_fin, '[)') && daterange($3, $4, '[)')
+        LIMIT 1
+      `;
+      const { rows: choque } = await client.query(qChoca, [
+        nuevaHabitacionId,
+        reservaId,
+        nuevoDesde,
+        nuevoHasta,
+      ]);
+      if (choque.length) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          message: "La habitación ya tiene una reserva u ocupación en ese rango.",
+        });
+      }
+    }
+
+    // 5) Actualizar
+    const upd = await client.query(
+      `
+      UPDATE reservas
+      SET habitacion_id = $1,
+          fecha_inicio  = $2,
+          fecha_fin     = $3,
+          estado        = COALESCE($4, estado),
+          notas         = COALESCE($5, notas),
+          updated_at    = NOW()
+      WHERE id = $6
+      RETURNING *
+      `,
+      [nuevaHabitacionId, nuevoDesde, nuevoHasta, estado, notas, reservaId]
+    );
+
+    await client.query("COMMIT");
+    return res.json(upd.rows[0]);
   } catch (e) {
+    await client.query("ROLLBACK");
     console.error("actualizarReserva error:", e);
-    res.status(500).json({ message: "Error al actualizar la reserva." });
+    return res.status(500).json({ message: "Error al actualizar la reserva." });
+  } finally {
+    client.release();
   }
 };
+
 
 /**
  * DELETE /api/reservas/:id
- * Lógica: marcar como cancelada.
+ * Lógicamente la marcamos como cancelada.
  */
 export const cancelarReserva = async (req, res) => {
   const { id } = req.params;
+  const client = await pool.connect();
+
   try {
-    const q = `
-      UPDATE reservas
-      SET estado = 'cancelada',
-          updated_at = NOW()
-      WHERE id = $1
-      RETURNING *
-    `;
-    const { rows } = await pool.query(q, [id]);
+    await client.query("BEGIN");
+
+    const { rows } = await client.query(
+      "SELECT id, estado, habitacion_id FROM reservas WHERE id = $1 FOR UPDATE",
+      [id]
+    );
     if (!rows.length) {
+      await client.query("ROLLBACK");
       return res.status(404).json({ message: "Reserva no encontrada." });
     }
-    res.json(rows[0]);
+
+    const reserva = rows[0];
+
+    const upd = await client.query(
+      `UPDATE reservas
+       SET estado = 'cancelada',
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [id]
+    );
+
+    // si estaba reservada (sin ocupar), la habitación vuelve a disponible
+    if (reserva.estado === "reservada") {
+      await client.query(
+        `UPDATE habitaciones
+         SET estado = 'disponible', updated_at = NOW()
+         WHERE id = $1`,
+        [reserva.habitacion_id]
+      );
+    }
+
+    await client.query("COMMIT");
+    res.json(upd.rows[0]);
   } catch (e) {
+    await client.query("ROLLBACK");
     console.error("cancelarReserva error:", e);
     res.status(500).json({ message: "Error al cancelar la reserva." });
+  } finally {
+    client.release();
   }
 };
+
 
 /**
  * POST /api/reservas/:id/checkin
@@ -329,16 +450,16 @@ export const checkinReserva = async (req, res) => {
 
     // validar fecha_sistema ∈ [fecha_inicio, fecha_fin)
     const cfg = await client.query(
-  "SELECT fecha_sistema FROM configuracion LIMIT 1"
-);
-
-const fechaSistema =
-  dayjs(cfg.rows?.[0]?.fecha_sistema).format("YYYY-MM-DD");
+      "SELECT fecha_sistema FROM configuracion LIMIT 1"
+    );
+    const fechaSistema =
+      dayjs(cfg.rows?.[0]?.fecha_sistema).format("YYYY-MM-DD") ||
+      dayjs().format("YYYY-MM-DD");
 
     const hoy = dayjs(fechaSistema);
     if (
       hoy.isBefore(dayjs(reserva.fecha_inicio), "day") ||
-      !hoy.isBefore(dayjs(reserva.fecha_fin), "day") // debe ser < fecha_fin
+      !hoy.isBefore(dayjs(reserva.fecha_fin), "day")
     ) {
       await client.query("ROLLBACK");
       return res.status(400).json({
@@ -347,7 +468,8 @@ const fechaSistema =
       });
     }
 
-    const upd = await client.query(
+    // actualizar reserva
+    const updReserva = await client.query(
       `UPDATE reservas
        SET estado = 'ocupada',
            checkin_at = NOW(),
@@ -357,8 +479,16 @@ const fechaSistema =
       [id]
     );
 
+    // actualizar estado de la habitación
+    await client.query(
+      `UPDATE habitaciones
+       SET estado = 'ocupada', updated_at = NOW()
+       WHERE id = $1`,
+      [reserva.habitacion_id]
+    );
+
     await client.query("COMMIT");
-    res.json(upd.rows[0]);
+    res.json(updReserva.rows[0]);
   } catch (e) {
     await client.query("ROLLBACK");
     console.error("checkinReserva error:", e);
@@ -368,54 +498,102 @@ const fechaSistema =
   }
 };
 
+
 /**
  * POST /api/reservas/:id/checkout
+ * Ahora:
+ *  - Solo permite checkout si la reserva está 'ocupada'
+ *  - Debe existir ya una factura asociada
+ *  - Valida fecha_sistema >= fecha_inicio + 1 día
  */
+
+
 export const checkoutReserva = async (req, res) => {
   const { id } = req.params;
-  const client = await pool.connect();
+  const reservaId = Number(id);
 
+  if (!reservaId || Number.isNaN(reservaId)) {
+    return res.status(400).json({ message: "ID de reserva inválido." });
+  }
+
+  const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
-    const { rows } = await client.query(
-      "SELECT fecha_inicio, fecha_fin, estado FROM reservas WHERE id = $1 FOR UPDATE",
-      [id]
+    // 1) Traer reserva con lock
+    const rRes = await client.query(
+      `SELECT id, estado, fecha_inicio, fecha_fin
+       FROM reservas
+       WHERE id = $1
+       FOR UPDATE`,
+      [reservaId]
     );
 
-    if (!rows.length) {
+    if (!rRes.rows.length) {
       await client.query("ROLLBACK");
       return res.status(404).json({ message: "Reserva no encontrada." });
     }
 
-    const reserva = rows[0];
+    const reserva = rRes.rows[0];
 
+    // 2) Validar estado
     if (reserva.estado !== "ocupada") {
       await client.query("ROLLBACK");
       return res.status(400).json({
-        message: "Solo se puede hacer check-out de reservas ocupadas.",
+        message: "Solo se puede hacer check-out de reservas en estado 'ocupada'.",
       });
     }
 
-    // Validar fecha_sistema (opcional pero elegante)
-    const cfg = await client.query(
-      "SELECT fecha_sistema FROM configuracion LIMIT 1"
-    );
-    const fechaSistema = dayjs(cfg.rows?.[0]?.fecha_sistema).format(
-      "YYYY-MM-DD"
-    );
-    const hoy = dayjs(fechaSistema);
+    // 3) Validación de fecha mínima (opcional, pero útil)
+    //    Permite checkout desde el día siguiente al check-in
+    try {
+      const cfg = await client.query(
+        "SELECT fecha_sistema FROM configuracion LIMIT 1"
+      );
+      const fechaSistema = cfg.rows?.[0]?.fecha_sistema;
+      if (fechaSistema) {
+        const hoy = dayjs(fechaSistema).startOf("day");
+        const minCheckout = dayjs(reserva.fecha_inicio).add(1, "day").startOf("day");
+        if (hoy.isBefore(minCheckout)) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({
+            message:
+              "El check-out solo se permite a partir del día siguiente a la llegada (según la fecha operativa).",
+          });
+        }
+      }
+    } catch (_) {
+      // si configuracion no existe o algo raro, no bloqueamos el checkout
+    }
 
-    // No permitir checkout antes del día siguiente al check-in teórico
-    const fechaMinCheckout = dayjs(reserva.fecha_inicio).add(1, "day");
-    if (hoy.isBefore(fechaMinCheckout, "day")) {
+    // 4) Verificar factura emitida (CLAVE para tu flujo)
+    const rFact = await client.query(
+      `SELECT id, estado
+       FROM facturas
+       WHERE reserva_id = $1
+       ORDER BY id DESC
+       LIMIT 1`,
+      [reservaId]
+    );
+
+    if (!rFact.rows.length) {
       await client.query("ROLLBACK");
       return res.status(400).json({
-        message:
-          "El check-out solo se puede realizar a partir del día siguiente a la llegada.",
+        message: "No se puede hacer check-out sin una factura generada.",
       });
     }
 
+    const factura = rFact.rows[0];
+
+    // Si tu columna estado existe (recomendado), validamos emitida
+    if (factura.estado && factura.estado !== "emitida") {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        message: "La factura debe estar en estado 'emitida' para confirmar el check-out.",
+      });
+    }
+
+    // 5) Hacer checkout
     const upd = await client.query(
       `UPDATE reservas
        SET estado = 'finalizada',
@@ -423,19 +601,20 @@ export const checkoutReserva = async (req, res) => {
            updated_at = NOW()
        WHERE id = $1
        RETURNING *`,
-      [id]
+      [reservaId]
     );
 
     await client.query("COMMIT");
-    res.json(upd.rows[0]);
+    return res.json(upd.rows[0]);
   } catch (e) {
     await client.query("ROLLBACK");
     console.error("checkoutReserva error:", e);
-    res.status(500).json({ message: "Error al hacer check-out." });
+    return res.status(500).json({ message: "Error al hacer check-out." });
   } finally {
     client.release();
   }
 };
+
 
 
 /**
@@ -452,7 +631,8 @@ export const obtenerDatosCheckIn = async (req, res) => {
              h.numero AS habitacion_numero,
              COALESCE(hu.nombre, '') AS huesped_nombre,
              hu.documento,
-             hu.telefono
+             hu.telefono,
+             hu.email
       FROM reservas r
       JOIN habitaciones h ON h.id = r.habitacion_id
       LEFT JOIN huespedes hu ON hu.id = r.huesped_id
@@ -460,9 +640,8 @@ export const obtenerDatosCheckIn = async (req, res) => {
       LIMIT 1
     `;
     const { rows } = await pool.query(q, [id]);
-    if (!rows.length) {
+    if (!rows.length)
       return res.status(404).json({ message: "Reserva no encontrada." });
-    }
     res.json(rows[0]);
   } catch (e) {
     console.error("obtenerDatosCheckIn error:", e);
@@ -474,79 +653,132 @@ export const obtenerDatosCheckIn = async (req, res) => {
 
 /**
  * GET /api/reservas/:id/finanzas
- * Devuelve reserva + pagos + factura + resumen.
+ * Devuelve:
+ *  - reserva (con datos básicos)
+ *  - pagos
+ *  - factura
+ *  - detalles (líneas de factura)
+ *  - resumen (totales)
  */
 export const obtenerFinanzasReserva = async (req, res) => {
   const { id } = req.params;
 
+  if (isNaN(id)) {
+    return res.status(400).json({ message: "ID de reserva inválido." });
+  }
+
   try {
+    // 1. Reserva + habitación + huésped
     const rReserva = await pool.query(
-      `SELECT r.*,
-              h.numero AS habitacion_numero,
-              h.tipo   AS habitacion_tipo,
-              COALESCE(hu.nombre, '') AS huesped_nombre
-       FROM reservas r
-       JOIN habitaciones h ON h.id = r.habitacion_id
-       LEFT JOIN huespedes hu ON hu.id = r.huesped_id
-       WHERE r.id = $1
-       LIMIT 1`,
+      `
+      SELECT 
+        r.*,
+        h.numero AS habitacion_numero,
+        h.tipo   AS habitacion_tipo,
+        COALESCE(hu.nombre, '') AS huesped_nombre
+      FROM reservas r
+      JOIN habitaciones h ON h.id = r.habitacion_id
+      LEFT JOIN huespedes hu ON hu.id = r.huesped_id
+      WHERE r.id = $1
+      LIMIT 1
+      `,
       [id]
     );
 
     if (!rReserva.rows.length) {
       return res.status(404).json({ message: "Reserva no encontrada." });
     }
+
     const reserva = rReserva.rows[0];
 
+    // 2. Pagos / depósitos
     const rPagos = await pool.query(
-      `SELECT *
-       FROM pagos
-       WHERE reserva_id = $1
-       ORDER BY created_at ASC`,
+      `
+      SELECT *
+      FROM pagos
+      WHERE reserva_id = $1
+      ORDER BY created_at ASC
+      `,
       [id]
     );
     const pagos = rPagos.rows;
 
+    const total_depositos = pagos
+      .filter((p) => p.tipo === "deposito")
+      .reduce((acc, p) => acc + Number(p.monto), 0);
+
+    const total_pagos = pagos
+      .filter((p) => p.tipo === "pago")
+      .reduce((acc, p) => acc + Number(p.monto), 0);
+
+    const total_pagado = total_depositos + total_pagos;
+
+    // 3. Factura (si existe)
     const rFactura = await pool.query(
-      `SELECT *
-       FROM facturas
-       WHERE reserva_id = $1
-       LIMIT 1`,
+      `
+      SELECT *
+      FROM facturas
+      WHERE reserva_id = $1
+      LIMIT 1
+      `,
       [id]
     );
+
     const factura = rFactura.rows[0] || null;
 
-    const total_pagado = pagos.reduce(
-      (acc, p) => acc + Number(p.monto),
-      0
-    );
+    // 4. Detalles de factura (si hay factura)
+    let detalles = [];
+    let total_facturado = 0;
 
-    const total_facturado = factura ? Number(factura.total) : 0;
+    if (factura) {
+      const rDet = await pool.query(
+        `
+        SELECT *
+        FROM factura_detalle
+        WHERE factura_id = $1
+        ORDER BY id ASC
+        `,
+        [factura.id]
+      );
+      detalles = rDet.rows;
+      total_facturado = Number(factura.total);
+    }
+
+    const saldo = total_facturado - total_pagado;
+
+    const resumen = {
+      total_depositos,
+      total_pagos,
+      total_pagado,
+      total_facturado,
+      saldo,
+    };
 
     res.json({
       reserva,
       pagos,
       factura,
-      resumen: {
-        total_pagado,
-        total_facturado,
-        saldo: total_facturado - total_pagado,
-      },
+      detalles,
+      resumen,
     });
   } catch (e) {
     console.error("obtenerFinanzasReserva error:", e);
-    res.status(500).json({ message: "Error al obtener finanzas de la reserva." });
+    res.status(500).json({ message: "Error al obtener datos financieros." });
   }
 };
 
 /**
  * POST /api/reservas/:id/facturar
- * Crea una factura si la reserva está finalizada y tiene pagos.
+ * Solo cuando la reserva está 'ocupada' y hay pagos/depositos.
  */
 export const facturarReserva = async (req, res) => {
   const { id } = req.params;
-  const client = await pool.connect();
 
+  if (isNaN(id)) {
+    return res.status(400).json({ message: "ID de reserva inválido." });
+  }
+
+  const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
@@ -560,29 +792,34 @@ export const facturarReserva = async (req, res) => {
     }
     const reserva = rRes.rows[0];
 
-    if (reserva.estado !== "finalizada") {
+    // ✅ SOLO se factura cuando está OCUPADA (después del check-in y antes del check-out)
+    if (reserva.estado !== "ocupada") {
       await client.query("ROLLBACK");
       return res.status(400).json({
-        message: "Solo se puede facturar una reserva finalizada (check-out).",
+        message:
+          "Solo se puede facturar una reserva que está 'ocupada' (después del check-in y antes del check-out).",
       });
     }
 
-    // Ver si ya tiene factura
+    // Verificar que no exista factura previa
     const rFacturaPrev = await client.query(
       "SELECT * FROM facturas WHERE reserva_id = $1 LIMIT 1",
       [id]
     );
     if (rFacturaPrev.rows.length) {
       await client.query("ROLLBACK");
-      return res.status(400).json({ message: "La reserva ya tiene factura." });
+      return res.status(400).json({
+        message: "La reserva ya tiene una factura generada.",
+      });
     }
 
-    // Pagos asociados
+    // Pagos/depositos asociados
     const rPagos = await client.query(
       "SELECT * FROM pagos WHERE reserva_id = $1",
       [id]
     );
     const pagos = rPagos.rows;
+
     const total_pagado = pagos.reduce(
       (acc, p) => acc + Number(p.monto),
       0
@@ -591,13 +828,12 @@ export const facturarReserva = async (req, res) => {
     if (total_pagado <= 0) {
       await client.query("ROLLBACK");
       return res.status(400).json({
-        message: "No hay pagos/de depósitos registrados. No se puede facturar.",
+        message:
+          "No hay depósitos ni pagos registrados. No se puede generar factura.",
       });
     }
 
-    // Por ahora, asumimos que el total de la factura = total pagado
-    const total_factura = total_pagado;
-
+    const total_factura = total_pagado; // por ahora igual al total pagado
     const numero = `F-${dayjs().format("YYYYMMDD")}-${id}`;
 
     const rFactura = await client.query(
@@ -608,10 +844,9 @@ export const facturarReserva = async (req, res) => {
     );
     const factura = rFactura.rows[0];
 
-    // Detalle básico (alojamiento)
     await client.query(
       `INSERT INTO factura_detalle
-        (factura_id, descripcion, cantidad, valor_unitario, valor_total)
+         (factura_id, descripcion, cantidad, valor_unitario, valor_total)
        VALUES ($1,$2,$3,$4,$5)`,
       [
         factura.id,
@@ -627,9 +862,159 @@ export const facturarReserva = async (req, res) => {
   } catch (e) {
     await client.query("ROLLBACK");
     console.error("facturarReserva error:", e);
-    res.status(500).json({ message: "Error al generar la factura." });
+    res
+      .status(500)
+      .json({ message: "Error al generar la factura de la reserva." });
   } finally {
     client.release();
+  }
+};
+
+/**
+ * POST /api/reservas/:id/factura/cargos
+ * Agrega cargos adicionales a la factura existente.
+ * Body: { descripcion, cantidad, valor_unitario }
+ */
+export const agregarCargoFactura = async (req, res) => {
+  const { id } = req.params; // id de la reserva
+  const { descripcion, cantidad, valor_unitario } = req.body;
+
+  if (!descripcion || !cantidad || !valor_unitario) {
+    return res.status(400).json({
+      message: "Descripción, cantidad y valor unitario son obligatorios.",
+    });
+  }
+
+  const cant = Number(cantidad);
+  const vu = Number(valor_unitario);
+
+  if (isNaN(cant) || isNaN(vu) || cant <= 0 || vu < 0) {
+    return res.status(400).json({
+      message: "Cantidad y valor unitario deben ser numéricos válidos.",
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // 1. Traer reserva y factura
+    const rRes = await client.query(
+      "SELECT * FROM reservas WHERE id = $1 FOR UPDATE",
+      [id]
+    );
+
+    if (!rRes.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Reserva no encontrada." });
+    }
+
+    const reserva = rRes.rows[0];
+
+    // Solo permitimos cargos adicionales mientras está OCUPADA
+    if (reserva.estado !== "ocupada") {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        message:
+          "Solo se pueden agregar cargos adicionales cuando la reserva está 'ocupada'.",
+      });
+    }
+
+    const rFact = await client.query(
+      "SELECT * FROM facturas WHERE reserva_id = $1 LIMIT 1 FOR UPDATE",
+      [id]
+    );
+
+    if (!rFact.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        message: "La reserva aún no tiene factura. Genera la factura primero.",
+      });
+    }
+
+    const factura = rFact.rows[0];
+
+    const valor_total = cant * vu;
+
+    // 2. Insertar línea de detalle
+    const rDet = await client.query(
+      `
+      INSERT INTO factura_detalle
+        (factura_id, descripcion, cantidad, valor_unitario, valor_total)
+      VALUES ($1,$2,$3,$4,$5)
+      RETURNING *
+      `,
+      [factura.id, descripcion, cant, vu, valor_total]
+    );
+
+    const detalleNuevo = rDet.rows[0];
+
+    // 3. Actualizar total de la factura
+    const nuevoTotal = Number(factura.total) + valor_total;
+
+    const rFactUpd = await client.query(
+      `
+      UPDATE facturas
+      SET total = $1
+      WHERE id = $2
+      RETURNING *
+      `,
+      [nuevoTotal, factura.id]
+    );
+
+    const facturaActualizada = rFactUpd.rows[0];
+
+    await client.query("COMMIT");
+
+    res.status(201).json({
+      message: "Cargo adicional agregado correctamente.",
+      detalle: detalleNuevo,
+      factura: facturaActualizada,
+    });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error("agregarCargoFactura error:", e);
+    res.status(500).json({
+      message: "Error al agregar el cargo adicional a la factura.",
+    });
+  } finally {
+    client.release();
+  }
+};
+
+export const listarHabitacionesDisponibles = async (req, res) => {
+  const { desde, hasta, tipo } = req.query;
+
+  if (!desde || !hasta) {
+    return res.status(400).json({ message: "Debe enviar desde y hasta." });
+  }
+
+  const d = dayjs(desde).format("YYYY-MM-DD");
+  const h = dayjs(hasta).format("YYYY-MM-DD");
+
+  if (!dayjs(d).isValid() || !dayjs(h).isValid() || !dayjs(h).isAfter(d)) {
+    return res.status(400).json({ message: "Rango de fechas inválido." });
+  }
+
+  try {
+    const q = `
+      SELECT h.id, h.numero, h.tipo, h.tarifa_base, h.estado
+      FROM habitaciones h
+      WHERE ($3::text IS NULL OR h.tipo = $3)
+        AND NOT EXISTS (
+          SELECT 1
+          FROM reservas r
+          WHERE r.habitacion_id = h.id
+            AND r.estado <> 'cancelada'
+            AND daterange(r.fecha_inicio, r.fecha_fin, '[)') && daterange($1, $2, '[)')
+        )
+      ORDER BY h.numero ASC
+    `;
+    const { rows } = await pool.query(q, [d, h, tipo || null]);
+    return res.json(rows);
+  } catch (e) {
+    console.error("listarHabitacionesDisponibles error:", e);
+    return res.status(500).json({ message: "Error al consultar disponibilidad." });
   }
 };
 

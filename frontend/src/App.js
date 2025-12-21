@@ -12,6 +12,10 @@ import NuevaReserva from "./pages/NuevaReserva";
 import NuevoWalkIn from "./pages/NuevoWalkIn";
 import Reservas from "./pages/Reservas";
 import DetalleReserva from "./pages/DetalleReserva";
+import Huespedes from "./pages/Huespedes";
+import Habitaciones from "./pages/Habitaciones";
+import Facturacion from "./pages/Facturacion";
+
 
 export default function App() {
   return (
@@ -130,7 +134,7 @@ export default function App() {
           path="/huespedes"
           element={
             <PrivateRoute>
-              <MainLayout>Huéspedes (pendiente de página)</MainLayout>
+              <MainLayout> <Huespedes /> </MainLayout>
             </PrivateRoute>
           }
         />
@@ -139,7 +143,9 @@ export default function App() {
           path="/habitaciones"
           element={
             <PrivateRoute>
-              <MainLayout>Habitaciones (pendiente de página)</MainLayout>
+              <MainLayout> 
+                <Habitaciones />
+                </MainLayout>
             </PrivateRoute>
           }
         />
@@ -152,7 +158,9 @@ export default function App() {
           path="/facturacion"
           element={
             <PrivateRoute>
-              <MainLayout>Facturación (pendiente de página)</MainLayout>
+              <MainLayout>
+                <Facturacion />
+                </MainLayout>
             </PrivateRoute>
           }
         />
@@ -181,4 +189,4 @@ export default function App() {
       </Routes>
     </BrowserRouter>
   );
-}
+} 

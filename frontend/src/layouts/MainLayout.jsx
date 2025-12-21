@@ -49,6 +49,9 @@ export default function MainLayout({ children }) {
                 <NavDropdown.Item as={Link} to="/checkin/pendientes">
                   Huéspedes Check-In (pendiente)
                 </NavDropdown.Item>
+                <NavDropdown.Item as= {Link} to ="/huespedes">
+                Gestión de Huéspedes
+                </NavDropdown.Item>
               </NavDropdown>
 
               {/* Menú Auditoría (placeholder) */}

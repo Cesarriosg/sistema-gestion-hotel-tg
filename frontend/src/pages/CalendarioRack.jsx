@@ -27,19 +27,34 @@ export default function CalendarioRack() {
   const [eventoSel, setEventoSel] = useState(null);
   const [showEventModal, setShowEventModal] = useState(false);
 
+    //    editar reserva 
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [editDesde, setEditDesde] = useState("");
+  const [editHasta, setEditHasta] = useState("");
+  const [editNotas, setEditNotas] = useState("");
+
   const navigate = useNavigate();
+  const token = localStorage.getItem("token");
 
   useEffect(() => {
     (async () => {
       await obtenerFechaSistema();
       await cargarRack();
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const authHeader = token
+    ? { Authorization: `Bearer ${token}` }
+    : undefined;
 
   const obtenerFechaSistema = async () => {
     try {
       const r = await axios.get(
-        "http://localhost:4000/api/config/fecha-sistema"
+        "http://localhost:4000/api/config/fecha-sistema",
+        { headers: authHeader }
       );
       setFechaSistema(dayjs(r.data.fecha).format("YYYY-MM-DD"));
     } catch (e) {
@@ -49,9 +64,13 @@ export default function CalendarioRack() {
 
   const cargarRack = async () => {
     try {
-      const habs = await axios.get("http://localhost:4000/api/habitaciones");
+      const habs = await axios.get(
+        "http://localhost:4000/api/habitaciones",
+        { headers: authHeader }
+      );
       const reservas = await axios.get(
-        "http://localhost:4000/api/reservas/calendario"
+        "http://localhost:4000/api/reservas/calendario",
+        { headers: authHeader }
       );
 
       setResources(
@@ -88,8 +107,81 @@ export default function CalendarioRack() {
     }
   };
 
+    const abrirEditarReserva = async () => {
+    if (!eventoSel) return;
+    setEditError("");
+    setEditLoading(true);
+
+    try {
+      const r = await axios.get(
+        `http://localhost:4000/api/reservas/${eventoSel.id}`,
+        { headers: authHeader }
+      );
+
+      setEditDesde(dayjs(r.data.fecha_inicio).format("YYYY-MM-DD"));
+      setEditHasta(dayjs(r.data.fecha_fin).format("YYYY-MM-DD"));
+      setEditNotas(r.data.notas || "");
+
+      setShowEditModal(true);
+    } catch (e) {
+      console.error("Error cargando reserva para editar:", e);
+      alert("No se pudo cargar la reserva para edición.");
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const guardarEdicionReserva = async () => {
+    if (!eventoSel) return;
+    setEditError("");
+
+    if (!editDesde || !editHasta) {
+      setEditError("Debe seleccionar desde y hasta.");
+      return;
+    }
+    if (!dayjs(editHasta).isAfter(dayjs(editDesde))) {
+      setEditError("La fecha de salida debe ser posterior a la fecha de ingreso.");
+      return;
+    }
+
+    try {
+      setEditLoading(true);
+      await axios.put(
+        `http://localhost:4000/api/reservas/${eventoSel.id}`,
+        {
+          fecha_inicio: editDesde,
+          fecha_fin: editHasta,
+          notas: editNotas?.trim() || null,
+        },
+        { headers: authHeader }
+      );
+
+      // cerrar modales y refrescar rack
+      setShowEditModal(false);
+      setShowEventModal(false);
+      setEventoSel(null);
+      await cargarRack();
+    } catch (e) {
+      const status = e?.response?.status;
+      const msg = e?.response?.data?.message;
+
+      if (status === 409) {
+        setEditError(msg || "Choque de fechas: la habitación ya tiene una reserva en ese rango.");
+        return;
+      }
+      setEditError(msg || "No se pudo actualizar la reserva.");
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+
   const nowValue = useMemo(() => {
-    return dayjs(fechaSistema).hour(12).minute(0).second(0).toDate();
+    return dayjs(fechaSistema)
+      .hour(12)
+      .minute(0)
+      .second(0)
+      .toDate();
   }, [fechaSistema]);
 
   const esHoyDelSistema = (yymmdd) => yymmdd === fechaSistema;
@@ -127,9 +219,13 @@ export default function CalendarioRack() {
         );
         return;
       }
-      navigate(`/walkin/nuevo?hab=${habNumero}&desde=${start}&hasta=${end}`);
+      navigate(
+        `/walkin/nuevo?hab=${habNumero}&desde=${start}&hasta=${end}`
+      );
     } else if (accion === "reserva") {
-      navigate(`/reservas/nueva?hab=${habNumero}&desde=${start}&hasta=${end}`);
+      navigate(
+        `/reservas/nueva?hab=${habNumero}&desde=${start}&hasta=${end}`
+      );
     } else if (accion === "bloqueo_mantenimiento") {
       navigate(
         `/bloqueos/nuevo?tipo=mantenimiento&hab=${habNumero}&desde=${start}&hasta=${end}`
@@ -195,7 +291,8 @@ export default function CalendarioRack() {
 
     try {
       await axios.delete(
-        `http://localhost:4000/api/reservas/${eventoSel.id}`
+        `http://localhost:4000/api/reservas/${eventoSel.id}`,
+        { headers: authHeader }
       );
       await cargarRack();
       setShowEventModal(false);
@@ -210,26 +307,15 @@ export default function CalendarioRack() {
     navigate(`/checkin/${eventoSel.id}`);
   };
 
-  const hacerCheckout = async () => {
+  const hacerCheckout = () => {
     if (!eventoSel) return;
-    if (!window.confirm("¿Confirmar check-out de esta reserva?")) return;
-
-    try {
-      await axios.post(
-        `http://localhost:4000/api/reservas/${eventoSel.id}/checkout`
-      );
-      await cargarRack();
-      setShowEventModal(false);
-    } catch (e) {
-      console.error("Error en check-out:", e);
-      alert("No se pudo realizar el check-out.");
-    }
+    // Aquí solo navegamos al detalle para hacer el flujo:
+    // ver estado de cuenta -> generar factura -> botón de checkout final
+    navigate(`/reservas/${eventoSel.id}`);
   };
 
-  const irVerRegistro = () => {
+  const verRegistro = () => {
     if (!eventoSel) return;
-    // Cerramos el modal y vamos a la pantalla de detalle
-    setShowEventModal(false);
     navigate(`/reservas/${eventoSel.id}`);
   };
 
@@ -352,6 +438,62 @@ export default function CalendarioRack() {
         </Modal.Footer>
       </Modal>
 
+            {/* Modal editar reserva */}
+      <Modal show={showEditModal} onHide={() => setShowEditModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Editar reserva #{eventoSel?.id}</Modal.Title>
+        </Modal.Header>
+
+        <Modal.Body>
+          <p className="mb-2">
+            <strong>Habitación:</strong> {eventoSel?.habitacion}
+          </p>
+
+          <Form.Group className="mb-2">
+            <Form.Label>Ingreso</Form.Label>
+            <Form.Control
+              type="date"
+              value={editDesde}
+              onChange={(e) => setEditDesde(e.target.value)}
+            />
+          </Form.Group>
+
+          <Form.Group className="mb-2">
+            <Form.Label>Salida</Form.Label>
+            <Form.Control
+              type="date"
+              value={editHasta}
+              onChange={(e) => setEditHasta(e.target.value)}
+            />
+          </Form.Group>
+
+          <Form.Group className="mb-2">
+            <Form.Label>Notas internas</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={3}
+              value={editNotas}
+              onChange={(e) => setEditNotas(e.target.value)}
+              placeholder="Ej: Llegará tarde, requiere cama adicional, etc."
+            />
+          </Form.Group>
+
+          {editError && (
+            <div className="alert alert-danger py-2 mt-2 mb-0">{editError}</div>
+          )}
+        </Modal.Body>
+
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowEditModal(false)} disabled={editLoading}>
+            Cancelar
+          </Button>
+          <Button variant="warning" onClick={guardarEdicionReserva} disabled={editLoading}>
+            {editLoading ? "Guardando..." : "Guardar cambios"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+
       {/* Modal de acciones sobre la reserva */}
       <Modal show={showEventModal} onHide={handleCloseEventModal} centered>
         <Modal.Header closeButton>
@@ -376,6 +518,25 @@ export default function CalendarioRack() {
 
           <p>Acciones disponibles:</p>
           <div className="d-flex flex-column gap-2">
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              onClick={verRegistro}
+            >
+              Ver registro / estado de cuenta
+            </Button>
+
+            {eventoSel?.estado === "reservada" && (
+              <Button
+                variant="outline-warning"
+                size="sm"
+                onClick={abrirEditarReserva}
+                disabled={editLoading}
+              >
+              Editar reserva 
+              </Button>
+            )}
+
             {eventoSel?.estado === "reservada" && (
               <Button
                 variant="outline-primary"
@@ -394,7 +555,7 @@ export default function CalendarioRack() {
                 disabled={!puedeCheckout}
                 onClick={hacerCheckout}
               >
-                Check-Out
+                Ir a check-out / facturar
               </Button>
             )}
 
@@ -405,15 +566,6 @@ export default function CalendarioRack() {
               disabled={!puedeCancelar}
             >
               Cancelar reserva
-            </Button>
-
-            {/* 🔹 Nuevo botón: Ver registro completo de la reserva */}
-            <Button
-              variant="outline-secondary"
-              size="sm"
-              onClick={irVerRegistro}
-            >
-              Ver registro
             </Button>
           </div>
 

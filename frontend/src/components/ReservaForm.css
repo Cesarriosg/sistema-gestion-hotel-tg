@@ -25,3 +25,9 @@
   font-size: 13px;
   text-align: center;
 }
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
