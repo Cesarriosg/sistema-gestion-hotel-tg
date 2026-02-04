@@ -2,37 +2,45 @@ export const obtenerEstadoHabitacion = async (req, res) => {
   const { numero } = req.params;
   const fecha = req.query.fecha;
 
-  const habitacion = await pool.query(
-    "SELECT * FROM habitaciones WHERE numero = $1",
-    [numero]
-  );
+  try {
+    const habitacionQ = await pool.query(
+      "SELECT * FROM habitaciones WHERE numero = $1 LIMIT 1",
+      [numero]
+    );
 
-  // Buscar reserva activa o para hoy
-  const reserva = await pool.query(
-    `SELECT r.*,
-            h.nombre AS huesped_nombre
-     FROM reservas r
-     JOIN huespedes h ON r.huesped_id = h.id
-     WHERE r.habitacion_id = $1
-     AND r.estado != 'cancelada'
-     AND r.fecha_inicio <= $2
-     AND r.fecha_fin >= $2
-     LIMIT 1`,
-    [habitacion.rows[0].id, fecha]
-  );
-
-  let estado = habitacion.rows[0].estado;
-
-  // Si hay reserva para hoy → llegada hoy
-  if (reserva.rowCount > 0 && estado === "reservada") {
-    if (reserva.rows[0].fecha_inicio == fecha) {
-      estado = "llegada_hoy";
+    if (!habitacionQ.rows.length) {
+      return res.status(404).json({ message: "Habitación no existe." });
     }
-  }
 
-  res.json({
-    estado,
-    habitacion: habitacion.rows[0],
-    reserva: reserva.rows[0] || null
-  });
+    const habitacion = habitacionQ.rows[0];
+
+    const reservaQ = await pool.query(
+      `SELECT r.*,
+              COALESCE(h.nombre, '—') AS huesped_nombre
+       FROM reservas r
+       LEFT JOIN huespedes h ON r.huesped_id = h.id
+       WHERE r.habitacion_id = $1
+         AND r.estado != 'cancelada'
+         AND r.fecha_inicio <= $2
+         AND r.fecha_fin > $2  -- ✅ importante (hasta exclusivo)
+       ORDER BY r.id DESC
+       LIMIT 1`,
+      [habitacion.id, fecha]
+    );
+
+    const reserva = reservaQ.rows[0] || null;
+
+    let estado = habitacion.estado;
+
+    // llegada_hoy si hay reserva para hoy y hab está reservada
+    if (reserva && estado === "reservada") {
+      const inicio = dayjs(reserva.fecha_inicio).format("YYYY-MM-DD");
+      if (inicio === fecha) estado = "llegada_hoy";
+    }
+
+    return res.json({ estado, habitacion, reserva });
+  } catch (e) {
+    console.error("obtenerEstadoHabitacion error:", e);
+    return res.status(500).json({ message: "Error interno." });
+  }
 };

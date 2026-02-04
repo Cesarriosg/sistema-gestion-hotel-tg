@@ -39,7 +39,7 @@ export default function Facturacion() {
       if (desde) params.desde = desde;
       if (hasta) params.hasta = hasta;
 
-      const r = await axios.get("http://localhost:4000/api/facturas", {
+      const r = await axios.get("http://localhost:4000/api/facturacion/facturas", {
         params,
         ...axiosConfig,
       });
@@ -57,7 +57,7 @@ export default function Facturacion() {
       if (desde) params.desde = desde;
       if (hasta) params.hasta = hasta;
 
-      const r = await axios.get("http://localhost:4000/api/pagos", {
+      const r = await axios.get("http://localhost:4000/api/facturacion/pagos", {
         params,
         ...axiosConfig,
       });
@@ -87,7 +87,7 @@ export default function Facturacion() {
       setFacturaSel(null);
 
       const r = await axios.get(
-        `http://localhost:4000/api/facturas/${facturaId}`,
+        `http://localhost:4000/api/facturacion/facturas/${facturaId}`,
         axiosConfig
       );
 

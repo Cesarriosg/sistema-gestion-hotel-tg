@@ -20,13 +20,12 @@ export default function MainLayout({ children }) {
       <Navbar bg="primary" variant="dark" expand="lg">
         <Container fluid>
           <Navbar.Brand as={Link} to="/calendario">
-            🏨 Hotel Manager
+            Hotel Manager
           </Navbar.Brand>
 
           <Navbar.Toggle aria-controls="main-navbar" />
           <Navbar.Collapse id="main-navbar">
             <Nav className="me-auto">
-
               {/* Menú Reservas */}
               <NavDropdown title="Reservas" id="nav-reservas">
                 <NavDropdown.Item as={Link} to="/calendario">
@@ -36,7 +35,7 @@ export default function MainLayout({ children }) {
                   Calendario de reservas
                 </NavDropdown.Item>
                 <NavDropdown.Divider />
-                <NavDropdown.Item as={Link} to="/reservas/nueva">
+                <NavDropdown.Item as={Link} to="/reservas/nueva-manual">
                   Crear reserva individual
                 </NavDropdown.Item>
               </NavDropdown>
@@ -49,19 +48,24 @@ export default function MainLayout({ children }) {
                 <NavDropdown.Item as={Link} to="/checkin/pendientes">
                   Huéspedes Check-In (pendiente)
                 </NavDropdown.Item>
-                <NavDropdown.Item as= {Link} to ="/huespedes">
-                Gestión de Huéspedes
+                <NavDropdown.Item as={Link} to="/huespedes">
+                  Gestión de Huéspedes
                 </NavDropdown.Item>
               </NavDropdown>
 
-              {/* Menú Auditoría (placeholder) */}
+              {/* ✅ Menú Auditoría (AHORA REAL) */}
               <NavDropdown title="Auditoría" id="nav-auditoria">
-                <NavDropdown.Item disabled>
-                  Cargos a folios (pendiente)
+                <NavDropdown.Item as={Link} to="/auditoria/cargos-folios">
+                  Cargos a folios (cierre del día)
                 </NavDropdown.Item>
+
+                {/* opcional: si luego haces reporte */}
+                {/* <NavDropdown.Item as={Link} to="/auditoria/reportes">
+                  Reportes de auditoría
+                </NavDropdown.Item> */}
               </NavDropdown>
 
-              {/* Menú Ama de Llaves (placeholder) */}
+              {/* Menú Ama de Llaves */}
               <NavDropdown title="Ama de Llaves" id="nav-ama">
                 <NavDropdown.Item as={Link} to="/habitaciones">
                   Estado de habitaciones
@@ -75,28 +79,27 @@ export default function MainLayout({ children }) {
 
               {/* Opciones solo Admin */}
               {isAdmin && (
-                <>
-                  <NavDropdown title="Administración" id="nav-admin">
-                    <NavDropdown.Item as={Link} to="/panel">
-                      Panel administrador
-                    </NavDropdown.Item>
-                    <NavDropdown.Item as={Link} to="/configuracion">
-                      Configuración
-                    </NavDropdown.Item>
-                    <NavDropdown.Item as={Link} to="/usuarios">
-                      Gestión de usuarios
-                    </NavDropdown.Item>
-                  </NavDropdown>
-                </>
+                <NavDropdown title="Administración" id="nav-admin">
+                  <NavDropdown.Item as={Link} to="/habitaciones">
+                    Gestion de habitaciones
+                  </NavDropdown.Item>
+                  <NavDropdown.Item as={Link} to="/panel">
+                    Panel administador
+                  </NavDropdown.Item>
+                  <NavDropdown.Item as={Link} to="/configuracion">
+                    Configuración
+                  </NavDropdown.Item>
+                  <NavDropdown.Item as={Link} to="/usuarios">
+                    Gestión de usuarios
+                  </NavDropdown.Item>
+                </NavDropdown>
               )}
             </Nav>
 
             {/* Usuario + Cerrar sesión */}
             <div className="d-flex align-items-center gap-3">
               <span className="text-white">
-                {usuario
-                  ? `Bienvenido, ${usuario.email} (${usuario.rol})`
-                  : "No autenticado"}
+                {usuario ? `Bienvenido, ${usuario.email} (${usuario.rol})` : "No autenticado"}
               </span>
               <Button variant="outline-light" size="sm" onClick={handleLogout}>
                 Cerrar sesión

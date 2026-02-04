@@ -17,6 +17,6 @@ router.get("/facturas/:id", obtenerFactura);
 router.post("/reservas/:id/facturar", facturarReserva);
 
 router.get("/pagos", listarPagos);
-router.post("/reservas/:id/pagos", registrarPago);
+//router.post("/reservas/:id/pagos", registrarPago);
 
 export default router;

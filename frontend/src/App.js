@@ -15,7 +15,11 @@ import DetalleReserva from "./pages/DetalleReserva";
 import Huespedes from "./pages/Huespedes";
 import Habitaciones from "./pages/Habitaciones";
 import Facturacion from "./pages/Facturacion";
-
+import NuevaReservaLibre from "./pages/NuevaReservaLibre";
+import NuevoBloqueo from "./pages/NuevoBloqueo";
+import CargosReserva from "./pages/CargosReserva";
+import AuditoriaCargos from "./pages/AuditoriaCargos";
+import Usuarios from "./pages/Usuarios";
 
 export default function App() {
   return (
@@ -26,7 +30,6 @@ export default function App() {
         {/* ===================== */}
         <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
-
 
         {/* ===================== */}
         {/* RACK / PANTALLA PRINCIPAL */}
@@ -42,6 +45,47 @@ export default function App() {
           }
         />
 
+        {/* ===================== */}
+        {/* BLOQUEOS */}
+        {/* ===================== */}
+        <Route
+          path="/bloqueos/nuevo"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <NuevoBloqueo />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
+        {/* ===================== */}
+        {/* CARGOS POR RESERVA */}
+        {/* ===================== */}
+        <Route
+          path="/reservas/:id/cargos"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <CargosReserva />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
+        {/* ===================== */}
+        {/* ✅ AUDITORÍA GLOBAL */}
+        {/* ===================== */}
+        <Route
+          path="/auditoria/cargos-folios"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <AuditoriaCargos />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
 
         {/* ===================== */}
         {/* PANEL SOLO ADMIN */}
@@ -57,11 +101,9 @@ export default function App() {
           }
         />
 
-
         {/* ===================== */}
         {/* RESERVAS */}
         {/* ===================== */}
-        {/* LISTADO DE RESERVAS */}
         <Route
           path="/reservas"
           element={
@@ -73,7 +115,17 @@ export default function App() {
           }
         />
 
-        {/* DETALLE DE RESERVA (VER REGISTRO) */}
+        <Route
+          path="/reservas/nueva-manual"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <NuevaReservaLibre />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
         <Route
           path="/reservas/:id"
           element={
@@ -84,7 +136,6 @@ export default function App() {
             </PrivateRoute>
           }
         />
-
 
         {/* ===================== */}
         {/* NUEVA RESERVA / WALK-IN */}
@@ -111,7 +162,6 @@ export default function App() {
           }
         />
 
-
         {/* ===================== */}
         {/* CHECK-IN */}
         {/* ===================== */}
@@ -126,7 +176,6 @@ export default function App() {
           }
         />
 
-
         {/* ===================== */}
         {/* MÓDULOS GENERALES */}
         {/* ===================== */}
@@ -134,22 +183,24 @@ export default function App() {
           path="/huespedes"
           element={
             <PrivateRoute>
-              <MainLayout> <Huespedes /> </MainLayout>
+              <MainLayout>
+                <Huespedes />
+              </MainLayout>
             </PrivateRoute>
           }
         />
 
+        {/* ✅ si esta pantalla es administración, déjala SOLO ADMIN */}
         <Route
           path="/habitaciones"
           element={
-            <PrivateRoute>
-              <MainLayout> 
+            <PrivateRoute roles={["admin"]}>
+              <MainLayout>
                 <Habitaciones />
-                </MainLayout>
+              </MainLayout>
             </PrivateRoute>
           }
         />
-
 
         {/* ===================== */}
         {/* FACTURACIÓN */}
@@ -160,11 +211,10 @@ export default function App() {
             <PrivateRoute>
               <MainLayout>
                 <Facturacion />
-                </MainLayout>
+              </MainLayout>
             </PrivateRoute>
           }
         />
-
 
         {/* ===================== */}
         {/* SOLO ADMIN */}
@@ -178,15 +228,18 @@ export default function App() {
           }
         />
 
+        {/* ✅ AQUÍ EL CAMBIO CLAVE */}
         <Route
           path="/usuarios"
           element={
             <PrivateRoute roles={["admin"]}>
-              <MainLayout>Gestión de Usuarios</MainLayout>
+              <MainLayout>
+                <Usuarios />
+              </MainLayout>
             </PrivateRoute>
           }
         />
       </Routes>
     </BrowserRouter>
   );
-} 
+}

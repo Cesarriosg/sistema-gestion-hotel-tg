@@ -10,7 +10,7 @@ export default function Navbar() {
 
   return (
     <nav className="navbar navbar-dark bg-dark px-3">
-      <span className="navbar-brand">🏨 Sistema Hotelero</span>
+      <span className="navbar-brand">Sistema Hotelero</span>
       <button className="btn btn-outline-light" onClick={logout}>
         Cerrar Sesión
       </button>

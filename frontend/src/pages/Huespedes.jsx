@@ -1,256 +1,186 @@
 // src/pages/Huespedes.jsx
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { Form, Button, Modal } from "react-bootstrap";
 import dayjs from "dayjs";
+import { Card, Table, Row, Col, Form, Button, Spinner, Alert, Badge } from "react-bootstrap";
+
+const API = "http://localhost:4000";
+
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+const nombreMostrar = (h) => {
+  const full = [h.nombres, h.primer_apellido, h.segundo_apellido]
+    .map((x) => (x || "").trim())
+    .filter(Boolean)
+    .join(" ");
+  return full || h.nombre || "—";
+};
 
 export default function Huespedes() {
-  const [huespedes, setHuespedes] = useState([]);
-  const [filtroTexto, setFiltroTexto] = useState("");
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
+  const [q, setQ] = useState("");
+  const [fechaIngreso, setFechaIngreso] = useState("");
+
+  const [page, setPage] = useState(1);
+  const limit = 20;
+
+  const [items, setItems] = useState([]);
+  const [total, setTotal] = useState(0);
+
   const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState("");
 
-  const [showModal, setShowModal] = useState(false);
-  const [editando, setEditando] = useState(null);
-
-  const token = localStorage.getItem("token");
-  const authHeader = token ? { Authorization: `Bearer ${token}` } : undefined;
-
-  const cargarHuespedes = async () => {
+  const cargar = async (opts = {}) => {
     try {
       setCargando(true);
-      const params = {};
-      if (filtroTexto) params.q = filtroTexto;
-      if (desde && hasta) {
-        params.desde = desde;
-        params.hasta = hasta;
-      }
+      setError("");
 
-      const { data } = await axios.get("http://localhost:4000/api/huespedes", {
-        params,
-        headers: authHeader,
+      const p = opts.page ?? page;
+      const qq = opts.q ?? q;
+      const fi = opts.fechaIngreso ?? fechaIngreso;
+
+      const r = await axios.get(`${API}/api/huespedes`, {
+        params: { q: qq, fecha_ingreso: fi, page: p, limit },
+        headers: getAuthHeaders(),
       });
-      setHuespedes(data);
+
+      setItems(r.data.items || []);
+      setTotal(Number(r.data.total || 0));
+      setPage(Number(r.data.page || p));
     } catch (e) {
-      console.error("Error cargando huéspedes:", e);
-      alert("No se pudieron cargar los huéspedes.");
+      console.error("Error cargando huespedes:", e);
+      setError(e?.response?.data?.message || "No se pudieron cargar los huéspedes.");
     } finally {
       setCargando(false);
     }
   };
 
   useEffect(() => {
-    cargarHuespedes();
+    cargar({ page: 1 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const abrirModalEdicion = (h) => {
-    setEditando({
-      ...h,
-      fecha_nacimiento: h.fecha_nacimiento
-        ? dayjs(h.fecha_nacimiento).format("YYYY-MM-DD")
-        : "",
-    });
-    setShowModal(true);
+  const buscar = () => cargar({ page: 1 });
+
+  const limpiar = () => {
+    setQ("");
+    setFechaIngreso("");
+    cargar({ q: "", fechaIngreso: "", page: 1 });
   };
 
-  const cerrarModal = () => {
-    setShowModal(false);
-    setEditando(null);
-  };
-
-  const onChangeEdit = (campo, valor) => {
-    setEditando((prev) => ({ ...prev, [campo]: valor }));
-  };
-
-  const guardarHuesped = async () => {
-    if (!editando) return;
-    if (!editando.nombre || editando.nombre.trim() === "") {
-      alert("El nombre es obligatorio.");
-      return;
-    }
-
-    try {
-      await axios.put(
-        `http://localhost:4000/api/huespedes/${editando.id}`,
-        {
-          nombre: editando.nombre,
-          documento: editando.documento,
-          telefono: editando.telefono,
-          email: editando.email,
-          fecha_nacimiento: editando.fecha_nacimiento || null,
-        },
-        { headers: authHeader }
-      );
-      await cargarHuespedes();
-      cerrarModal();
-    } catch (e) {
-      console.error("Error actualizando huésped:", e);
-      alert("No se pudo actualizar el huésped.");
-    }
-  };
-
-  const limpiarFiltros = () => {
-    setFiltroTexto("");
-    setDesde("");
-    setHasta("");
-  };
+  const totalPages = Math.max(1, Math.ceil(total / limit));
 
   return (
-    <div style={{ padding: 10 }}>
-      <h2>Gestión de Huéspedes</h2>
+    <div className="container" style={{ maxWidth: 1200, paddingTop: 14, paddingBottom: 24 }}>
+      <Card className="shadow-sm">
+        <Card.Body>
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <div>
+              <h3 className="mb-0">Huéspedes</h3>
+              <div className="text-muted">Filtra por nombre, documento o fecha de ingreso.</div>
+            </div>
+            <Badge bg="secondary">{total} encontrados</Badge>
+          </div>
 
-      <div className="d-flex flex-wrap gap-2 my-3">
-        <Form.Control
-          style={{ maxWidth: 260 }}
-          placeholder="Buscar por nombre o documento..."
-          value={filtroTexto}
-          onChange={(e) => setFiltroTexto(e.target.value)}
-        />
+          {error && <Alert variant="danger" className="py-2">{error}</Alert>}
 
-        <div className="d-flex align-items-center gap-1">
-          <Form.Label className="mb-0">Desde:</Form.Label>
-          <Form.Control
-            type="date"
-            value={desde}
-            onChange={(e) => setDesde(e.target.value)}
-          />
-        </div>
+          <Row className="g-2 align-items-end">
+            <Col md={6}>
+              <Form.Label>Búsqueda (nombre o documento)</Form.Label>
+              <Form.Control
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Ej: César / 100621..."
+              />
+            </Col>
+            <Col md={3}>
+              <Form.Label>Fecha de ingreso</Form.Label>
+              <Form.Control
+                type="date"
+                value={fechaIngreso}
+                onChange={(e) => setFechaIngreso(e.target.value)}
+              />
+            </Col>
+            <Col md={3} className="d-flex gap-2">
+              <Button variant="primary" className="w-100" onClick={buscar} disabled={cargando}>
+                Buscar
+              </Button>
+              <Button variant="outline-secondary" className="w-100" onClick={limpiar} disabled={cargando}>
+                Limpiar
+              </Button>
+            </Col>
+          </Row>
 
-        <div className="d-flex align-items-center gap-1">
-          <Form.Label className="mb-0">Hasta:</Form.Label>
-          <Form.Control
-            type="date"
-            value={hasta}
-            onChange={(e) => setHasta(e.target.value)}
-          />
-        </div>
+          <hr />
 
-        <Button variant="primary" onClick={cargarHuespedes}>
-          Buscar
-        </Button>
-
-        <Button variant="outline-secondary" onClick={limpiarFiltros}>
-          Limpiar
-        </Button>
-      </div>
-
-      {cargando && <p>Cargando huéspedes...</p>}
-
-      <div className="table-responsive">
-        <table className="table table-sm align-middle">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Nombre</th>
-              <th>Documento</th>
-              <th>Teléfono</th>
-              <th>Email</th>
-              <th>Última estadía</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {!cargando &&
-              huespedes.map((h, idx) => (
-                <tr key={h.id}>
-                  <td>{idx + 1}</td>
-                  <td>{h.nombre}</td>
-                  <td>{h.documento || "—"}</td>
-                  <td>{h.telefono || "—"}</td>
-                  <td>{h.email || "—"}</td>
-                  <td>
-                    {h.ultima_estadia
-                      ? dayjs(h.ultima_estadia).format("YYYY-MM-DD")
-                      : "—"}
-                  </td>
-                  <td>
-                    <Button
-                      size="sm"
-                      variant="outline-primary"
-                      onClick={() => abrirModalEdicion(h)}
-                    >
-                      Ver / editar
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-
-            {!cargando && !huespedes.length && (
-              <tr>
-                <td colSpan={7} className="text-center text-muted">
-                  No se encontraron huéspedes con esos filtros.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Modal edición */}
-      <Modal show={showModal} onHide={cerrarModal} centered>
-        <Modal.Header closeButton>
-          <Modal.Title>Editar huésped</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {editando && (
-            <Form>
-              <Form.Group className="mb-2">
-                <Form.Label>Nombre *</Form.Label>
-                <Form.Control
-                  value={editando.nombre}
-                  onChange={(e) => onChangeEdit("nombre", e.target.value)}
-                />
-              </Form.Group>
-
-              <Form.Group className="mb-2">
-                <Form.Label>Documento</Form.Label>
-                <Form.Control
-                  value={editando.documento || ""}
-                  onChange={(e) => onChangeEdit("documento", e.target.value)}
-                />
-              </Form.Group>
-
-              <Form.Group className="mb-2">
-                <Form.Label>Teléfono</Form.Label>
-                <Form.Control
-                  value={editando.telefono || ""}
-                  onChange={(e) => onChangeEdit("telefono", e.target.value)}
-                />
-              </Form.Group>
-
-              <Form.Group className="mb-2">
-                <Form.Label>Email</Form.Label>
-                <Form.Control
-                  type="email"
-                  value={editando.email || ""}
-                  onChange={(e) => onChangeEdit("email", e.target.value)}
-                />
-              </Form.Group>
-
-              <Form.Group className="mb-2">
-                <Form.Label>Fecha de nacimiento</Form.Label>
-                <Form.Control
-                  type="date"
-                  value={editando.fecha_nacimiento || ""}
-                  onChange={(e) =>
-                    onChangeEdit("fecha_nacimiento", e.target.value)
-                  }
-                />
-              </Form.Group>
-            </Form>
+          {cargando ? (
+            <div className="d-flex align-items-center">
+              <Spinner animation="border" size="sm" className="me-2" />
+              <span>Cargando...</span>
+            </div>
+          ) : (
+            <div className="table-responsive">
+              <Table striped bordered hover size="sm" className="mb-2">
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Documento</th>
+                    <th>Teléfono</th>
+                    <th>Email</th>
+                    <th>Fecha ingreso</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="text-center text-muted">
+                        No hay resultados.
+                      </td>
+                    </tr>
+                  ) : (
+                    items.map((h) => (
+                      <tr key={h.id}>
+                        <td>{nombreMostrar(h)}</td>
+                        <td>{[h.tipo_documento, h.documento].filter(Boolean).join(" ") || "—"}</td>
+                        <td>{h.telefono || "—"}</td>
+                        <td>{h.email || "—"}</td>
+                        <td>{h.first_ingreso ? dayjs(h.first_ingreso).format("YYYY-MM-DD") : "—"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </Table>
+            </div>
           )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={cerrarModal}>
-            Cancelar
-          </Button>
-          <Button variant="primary" onClick={guardarHuesped}>
-            Guardar cambios
-          </Button>
-        </Modal.Footer>
-      </Modal>
+
+          {/* Paginación */}
+          <div className="d-flex justify-content-between align-items-center">
+            <div className="text-muted" style={{ fontSize: 13 }}>
+              Página {page} de {totalPages}
+            </div>
+            <div className="d-flex gap-2">
+              <Button
+                size="sm"
+                variant="outline-secondary"
+                disabled={cargando || page <= 1}
+                onClick={() => cargar({ page: page - 1 })}
+              >
+                ← Anterior
+              </Button>
+              <Button
+                size="sm"
+                variant="outline-secondary"
+                disabled={cargando || page >= totalPages}
+                onClick={() => cargar({ page: page + 1 })}
+              >
+                Siguiente →
+              </Button>
+            </div>
+          </div>
+        </Card.Body>
+      </Card>
     </div>
   );
 }

@@ -2,59 +2,57 @@
 import { Router } from "express";
 import {
   listarReservas,
-  obtenerReserva,
   getCalendarioReservas,
-  crearReserva,
+  crearReservaOWalkIn,
+  obtenerReserva,
   actualizarReserva,
   cancelarReserva,
   checkinReserva,
   checkoutReserva,
   obtenerDatosCheckIn,
   obtenerFinanzasReserva,
-  facturarReserva,
-  agregarCargoFactura,
-  listarHabitacionesDisponibles
+  previsualizarPrecioReserva,
+  listarHuespedesDeReserva,
+  obtenerHuespedesAsociadosReserva,
+  actualizarAcompanantesReserva,
 } from "../controllers/reservas.controller.js";
+
+import { registrarPago } from "../controllers/facturacion.controller.js";
 
 const router = Router();
 
-/**
- * IMPORTANTE: el orden de las rutas SÍ importa.
- * Primero rutas fijas (como /calendario),
- * luego las que tienen más segmentos (/:id/finanzas),
- * y al final la más genérica (/:id).
- */
-
-// 👉 Calendario / rack (la URL que usa CalendarioRack.jsx)
+// Calendario / rack
 router.get("/calendario", getCalendarioReservas);
 
-// Listado general de reservas
-router.get("/", listarReservas);
+// ✅ Precio preview
+router.get("/previsualizarPrecioReserva", previsualizarPrecioReserva);
 
-router.get("/disponibles", listarHabitacionesDisponibles);
-
-// Finanzas de la reserva
-router.get("/:id/finanzas", obtenerFinanzasReserva);
-
-// Datos para el modal de check-in
+// ✅ Datos check-in
 router.get("/:id/checkin/data", obtenerDatosCheckIn);
 
-// Detalle simple por id (DEBE IR DESPUÉS DE LAS OTRAS CON :id)
-router.get("/:id", obtenerReserva);
+// ✅ Finanzas
+router.get("/:id/finanzas", obtenerFinanzasReserva);
 
-// Crear / actualizar / cancelar
-router.post("/", crearReserva);
+router.post("/:id/pagos", registrarPago)
+
+// ✅ (si usas esta ruta en algún lado, déjala)
+router.get("/:id/huespedes", listarHuespedesDeReserva);
+
+// ✅ NUEVO: asociados (titular + acompañantes)
+router.get("/:id/huespedes-asociados", obtenerHuespedesAsociadosReserva);
+
+// ✅ NUEVO: actualizar acompañantes
+router.put("/:id/acompanantes", actualizarAcompanantesReserva);
+
+// Listado + crear
+router.get("/", listarReservas);
+router.post("/", crearReservaOWalkIn);
+
+router.get("/:id", obtenerReserva);
 router.put("/:id", actualizarReserva);
 router.delete("/:id", cancelarReserva);
 
-// Check-in / check-out
 router.post("/:id/checkin", checkinReserva);
 router.post("/:id/checkout", checkoutReserva);
-
-// Facturación
-router.post("/:id/facturar", facturarReserva);
-
-// Cargos adicionales sobre la factura
-router.post("/:id/factura/cargos", agregarCargoFactura);
 
 export default router;

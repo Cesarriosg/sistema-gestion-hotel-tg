@@ -8,29 +8,41 @@ import "react-big-calendar/lib/css/react-big-calendar.css";
 dayjs.locale("es");
 const localizer = dayjsLocalizer(dayjs);
 
+const API = "http://localhost:4000";
+
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 export default function CalendarioReservas() {
   const [events, setEvents] = useState([]);
 
   useEffect(() => {
     const cargarReservas = async () => {
       try {
-        const res = await axios.get("http://localhost:4000/api/reservas/calendario");
-        const data = res.data.map(r => ({
+        const res = await axios.get(`${API}/api/reservas/calendario`, {
+          headers: getAuthHeaders(),
+        });
+
+        const data = (res.data || []).map((r) => ({
           title: `${r.habitacion_numero} - ${r.huesped_nombre}`,
           start: new Date(r.fecha_inicio),
           end: new Date(r.fecha_fin),
         }));
+
         setEvents(data);
       } catch (err) {
         console.error("Error cargando reservas:", err);
       }
     };
+
     cargarReservas();
   }, []);
 
   return (
     <div style={{ height: "90vh", padding: "20px" }}>
-      <h2>📅 Calendario de Reservas</h2>
+      <h2>Calendario de Reservas</h2>
       <Calendar
         localizer={localizer}
         events={events}

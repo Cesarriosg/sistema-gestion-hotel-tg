@@ -5,13 +5,17 @@ import {
   obtenerHuesped,
   crearHuesped,
   actualizarHuesped,
+  buscarHuespedPorDocumento,
+  listarHuespedesFiltrados
 } from "../controllers/huespedes.controller.js";
 // Si quieres protegerlas:
-// import { verificarToken } from "../middlewares/authMiddleware.js";
+import { verificarToken } from "../middlewares/authMiddleware.js";
 
 const router = Router();
 
 // Por simplicidad, sin auth en backend (igual el frontend ya usa PrivateRoute)
+router.get("/buscar", verificarToken, buscarHuespedPorDocumento);
+router.get("/", listarHuespedesFiltrados);
 router.get("/", listarHuespedes);
 router.get("/:id", obtenerHuesped);
 router.post("/", crearHuesped);

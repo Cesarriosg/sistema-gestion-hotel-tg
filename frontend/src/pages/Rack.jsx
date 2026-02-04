@@ -32,7 +32,7 @@ export default function Rack() {
 
   return (
     <div>
-      <h2 className="mb-3">🏨 Rack de Habitaciones</h2>
+      <h2 className="mb-3"> Rack de Habitaciones</h2>
 
       <div className="rack-grid">
         {habitaciones.map((hab) => (

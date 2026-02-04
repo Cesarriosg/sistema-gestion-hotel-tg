@@ -1,3 +1,4 @@
+//src\routes\config.routes.js
 import express from "express";
 import { pool } from "../config/database.js";
 
