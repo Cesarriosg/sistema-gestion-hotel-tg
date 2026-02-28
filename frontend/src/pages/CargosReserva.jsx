@@ -46,7 +46,7 @@ export default function CargosReserva() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // ✅ Cargos = pagos.tipo === 'cargo' (incluye manuales y auditoría)
+  //  Cargos = pagos.tipo === 'cargo' (incluye manuales y auditoría)
   const cargos = useMemo(() => {
     return (pagos || []).filter((p) => String(p.tipo).toLowerCase() === "cargo");
   }, [pagos]);
@@ -69,7 +69,7 @@ export default function CargosReserva() {
     try {
       setGuardando(true);
 
-      // ✅ IMPORTANTE:
+      //  IMPORTANTE:
       // Tu backend registrarPago inserta en "referencia" (NO existe columna "descripcion" en tu tabla).
       // Entonces aquí mandamos "referencia" o mandamos "descripcion" pero el backend debe guardarlo en referencia.
       await axios.post(
@@ -78,7 +78,7 @@ export default function CargosReserva() {
           monto: m,
           metodo: "otro",
           tipo: "cargo",
-          referencia: descripcion.trim(), // ✅ alineado a tu tabla
+          referencia: descripcion.trim(), //  alineado a tu tabla
         },
         { headers: getAuthHeaders() }
       );
@@ -101,7 +101,7 @@ export default function CargosReserva() {
   };
 
   const fechaCargo = (c) => {
-    // ✅ Si existe columna fecha (DATE), úsala como fecha operativa del cargo
+    //  Si existe columna fecha (DATE), úsala como fecha operativa del cargo
     if (c.fecha) return dayjs(c.fecha).format("YYYY-MM-DD");
     // fallback
     return c.created_at ? dayjs(c.created_at).format("YYYY-MM-DD") : "—";

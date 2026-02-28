@@ -1,4 +1,3 @@
-// src/layouts/MainLayout.jsx
 import { Container, Nav, Navbar, NavDropdown, Button } from "react-bootstrap";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -16,7 +15,7 @@ export default function MainLayout({ children }) {
 
   return (
     <div className="d-flex flex-column" style={{ minHeight: "100vh" }}>
-      {/* Barra superior tipo Zeus */}
+      {/* Barra superior */}
       <Navbar bg="primary" variant="dark" expand="lg">
         <Container fluid>
           <Navbar.Brand as={Link} to="/calendario">
@@ -53,7 +52,7 @@ export default function MainLayout({ children }) {
                 </NavDropdown.Item>
               </NavDropdown>
 
-              {/* ✅ Menú Auditoría (AHORA REAL) */}
+              {/*  Menú Auditoría */}
               <NavDropdown title="Auditoría" id="nav-auditoria">
                 <NavDropdown.Item as={Link} to="/auditoria/cargos-folios">
                   Cargos a folios (cierre del día)

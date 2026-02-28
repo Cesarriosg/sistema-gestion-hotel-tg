@@ -92,7 +92,7 @@ export const crearBloqueo = async (req, res) => {
 
     const hab = hq.rows[0];
 
-    // ✅ Bloqueo NO permitido si choca con reserva/ocupación o con otro bloqueo
+    // Bloqueo NO permitido si choca con reserva/ocupación o con otro bloqueo
     const choca = await rangoChocaCon(client, hab.id, desde, hasta);
     if (choca) {
       await client.query("ROLLBACK");
@@ -108,7 +108,7 @@ export const crearBloqueo = async (req, res) => {
       [hab.id, tipoOk, desde, hasta, (motivo || "").trim() || null]
     );
 
-    // ✅ (opcional recomendado) si es mantenimiento y HOY está dentro del rango, set estado habitación = mantenimiento
+    // si es mantenimiento y HOY está dentro del rango, set estado habitación = mantenimiento
     const cfg = await client.query("SELECT fecha_sistema FROM configuracion LIMIT 1");
     const fechaSistema = dayjs(cfg.rows?.[0]?.fecha_sistema || new Date()).format("YYYY-MM-DD");
     const hoy = dayjs(fechaSistema);

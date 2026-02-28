@@ -37,18 +37,18 @@ export default function CheckIn() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  // ✅ datos reserva/habitación
+  //  datos reserva/habitación
   const [habitacion, setHabitacion] = useState({ numero: "", tipo: "" });
   const [rango, setRango] = useState({ desde: "", hasta: "" });
   const [estadoReserva, setEstadoReserva] = useState(""); // reservada / ocupada / etc
 
-  // ✅ plan + tarifa preview
+  //  plan + tarifa preview
   const [plan, setPlan] = useState("C1");
   const [cargandoTarifa, setCargandoTarifa] = useState(false);
   const [tarifaErr, setTarifaErr] = useState("");
   const [tarifa, setTarifa] = useState(null); // {noches, precio_noche, total}
 
-  // ✅ huésped titular
+  //  huésped titular
   const [titular, setTitular] = useState({
     tipo_documento: "",
     documento: "",
@@ -59,13 +59,22 @@ export default function CheckIn() {
     email: "",
   });
 
-  // ✅ acompañantes (HU-RH6)
+  //  acompañantes (HU-RH6)
   const [acompanantes, setAcompanantes] = useState([]);
 
-  // ✅ para editar huésped (solo cuando ya está ocupada)
+  //  para editar huésped (solo cuando ya está ocupada)
   const [huespedId, setHuespedId] = useState(null);
   const [editMode, setEditMode] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+
+  // ── Extender estadía ──────────────────────────────────────────────────
+  const [showExtender,  setShowExtender]  = useState(false);
+  const [nuevaFechaFin, setNuevaFechaFin] = useState("");
+  const [extendiendo,   setExtendiendo]   = useState(false);
+  const [errorExtender, setErrorExtender] = useState("");
+
+  // ── Registro hotelero PDF ──────────────────────────────────────────────
+  const [generandoPdf, setGenerandoPdf] = useState(false);
 
   // UX
   const [guardando, setGuardando] = useState(false);
@@ -79,7 +88,7 @@ export default function CheckIn() {
     return parts.join(" ");
   }, [titular]);
 
-  const puedeEditar = estadoReserva === "ocupada"; // ✅ solo si ya hizo check-in
+  const puedeEditar = estadoReserva === "ocupada"; //  solo si ya hizo check-in
   const camposBloqueados = puedeEditar && !editMode; // en ocupada, bloquea salvo modo edición
 
   const validarTitularMinimo = () => {
@@ -90,7 +99,7 @@ export default function CheckIn() {
     return "";
   };
 
-  // ✅ cargar data inicial del check-in
+  //  cargar data inicial del check-in
   const cargar = async () => {
     setError("");
     setOk("");
@@ -99,7 +108,7 @@ export default function CheckIn() {
         headers: getAuthHeaders(),
       });
 
-      // ✅ IMPORTANTE: normalizar fechas a YYYY-MM-DD (evita ISO con hora)
+      //  IMPORTANTE: normalizar fechas a YYYY-MM-DD (evita ISO con hora)
       const desde = r.data.fecha_inicio ? dayjs(r.data.fecha_inicio).format("YYYY-MM-DD") : "";
       const hasta = r.data.fecha_fin ? dayjs(r.data.fecha_fin).format("YYYY-MM-DD") : "";
 
@@ -131,7 +140,7 @@ export default function CheckIn() {
         email: r.data.email || "",
       }));
 
-      // ✅ si ya tienes endpoint para traer acompañantes, aquí podrías setearlos
+      //  si ya tienes endpoint para traer acompañantes, aquí podrías setearlos
       // por ahora dejamos vacío (se agregan antes del check-in)
       setAcompanantes([]);
       setEditMode(false);
@@ -145,7 +154,7 @@ export default function CheckIn() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // ✅ cargar tarifa preview
+  //  cargar tarifa preview
   const cargarTarifa = async () => {
     setTarifaErr("");
     setTarifa(null);
@@ -181,7 +190,7 @@ export default function CheckIn() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, habitacion.tipo, rango.desde, rango.hasta]);
 
-  // ✅ Acompañantes (HU-RH6)
+  //  Acompañantes (HU-RH6)
   const agregarAcompanante = () => {
     setAcompanantes((prev) => [
       ...prev,
@@ -207,7 +216,7 @@ export default function CheckIn() {
     );
   };
 
-  // ✅ confirmar edición (solo ocupada)
+  //  confirmar edición (solo ocupada)
   const abrirConfirmacionEdicion = () => {
     setError("");
     setOk("");
@@ -256,7 +265,7 @@ export default function CheckIn() {
     }
   };
 
-  // ✅ CHECK-IN (ANTES: se ingresan datos como si fuera primera vez)
+  //  CHECK-IN (ANTES: se ingresan datos como si fuera primera vez)
   const registrarCheckIn = async () => {
     const msg = validarTitularMinimo();
     if (msg) {
@@ -280,7 +289,7 @@ export default function CheckIn() {
             ...titular,
             nombre_completo: nombreCompleto,
           },
-          acompanantes, // ✅ HU-RH6 se guarda en BD
+          acompanantes, //  HU-RH6 se guarda en BD
         },
         { headers: getAuthHeaders() }
       );
@@ -292,6 +301,57 @@ export default function CheckIn() {
       setError(e?.response?.data?.message || "No se pudo completar el check-in.");
     } finally {
       setGuardando(false);
+    }
+  };
+
+  // ── Extender estadía ─────────────────────────────────────────────────
+  const abrirExtender = () => {
+    setNuevaFechaFin(dayjs(rango.hasta).add(1, "day").format("YYYY-MM-DD"));
+    setErrorExtender("");
+    setShowExtender(true);
+  };
+
+  const confirmarExtender = async () => {
+    if (!nuevaFechaFin) return;
+    setExtendiendo(true); setErrorExtender("");
+    try {
+      await axios.post(
+        `${API}/api/reservas/${id}/extender`,
+        { nueva_fecha_fin: nuevaFechaFin, usuario: "recepcion" },
+        { headers: getAuthHeaders() }
+      );
+      setShowExtender(false);
+      setOk(`Estadía extendida hasta el ${dayjs(nuevaFechaFin).format("DD/MM/YYYY")}.`);
+      await cargar();
+    } catch (e) {
+      setErrorExtender(e?.response?.data?.message || "No se pudo extender la estadía.");
+    } finally {
+      setExtendiendo(false);
+    }
+  };
+
+  // ── Descargar registro hotelero PDF ──────────────────────────────────
+  const imprimirRegistro = async () => {
+    setGenerandoPdf(true);
+    try {
+      const response = await axios.get(
+        `${API}/api/reservas/${id}/registro-hotelero`,
+        { headers: getAuthHeaders(), responseType: "blob" }
+      );
+      const url  = window.URL.createObjectURL(
+        new Blob([response.data], { type: "application/pdf" })
+      );
+      const link = document.createElement("a");
+      link.href  = url;
+      link.setAttribute("download", `registro_hotelero_reserva_${id}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setError("No se pudo generar el registro hotelero. Intenta de nuevo.");
+    } finally {
+      setGenerandoPdf(false);
     }
   };
 
@@ -311,7 +371,7 @@ export default function CheckIn() {
             </div>
 
             <div className="d-flex gap-2">
-              {/* ✅ SOLO aparece si ya está ocupada */}
+              {/*  SOLO aparece si ya está ocupada */}
               {puedeEditar && (!editMode ? (
                 <button
                   className="btn btn-outline-primary"
@@ -339,6 +399,30 @@ export default function CheckIn() {
                 </>
               ))}
 
+              {puedeEditar && (
+                <button
+                  className="btn btn-outline-success"
+                  onClick={abrirExtender}
+                  disabled={guardando}
+                  title="Extender la estadía del huésped"
+                >
+                  📅+ Extender estadía
+                </button>
+              )}
+
+              {puedeEditar && (
+                <button
+                  className="btn btn-outline-dark"
+                  onClick={imprimirRegistro}
+                  disabled={generandoPdf}
+                  title="Descargar registro hotelero en PDF"
+                >
+                  {generandoPdf
+                    ? <><span className="spinner-border spinner-border-sm me-1" />Generando...</>
+                    : "🖨️ Registro hotelero"}
+                </button>
+              )}
+
               <button className="btn btn-outline-secondary" onClick={() => navigate(-1)} disabled={guardando}>
                 Volver
               </button>
@@ -350,7 +434,7 @@ export default function CheckIn() {
           {error && <Alert variant="danger">{error}</Alert>}
           {ok && <Alert variant="success">{ok}</Alert>}
 
-          {/* ✅ PLAN + TARIFA (NO quitar) */}
+          {/*  PLAN + TARIFA (NO quitar) */}
           <div className="row g-3 mb-3">
             <div className="col-md-6">
               <div className="card border-0" style={{ background: "#f8fafc" }}>
@@ -413,7 +497,7 @@ export default function CheckIn() {
             </div>
           </div>
 
-          {/* ✅ TITULAR */}
+          {/*  TITULAR */}
           <h5 className="mb-3">Titular</h5>
 
           <div className="row g-3">
@@ -495,7 +579,7 @@ export default function CheckIn() {
             </div>
           </div>
 
-          {/* ✅ ACOMPAÑANTES (ANTES DEL CHECK-IN) */}
+          {/*  ACOMPAÑANTES (ANTES DEL CHECK-IN) */}
           {!puedeEditar && (
             <>
               <hr className="my-4" />
@@ -618,7 +702,7 @@ export default function CheckIn() {
 
           <hr className="my-4" />
 
-          {/* ✅ CONFIRMAR CHECK-IN */}
+          {/*  CONFIRMAR CHECK-IN */}
           {!puedeEditar && (
             <button className="btn btn-primary w-100" onClick={registrarCheckIn} disabled={guardando}>
               {guardando ? (
@@ -627,14 +711,56 @@ export default function CheckIn() {
                   Confirmando...
                 </>
               ) : (
-                "Confirmar Check-In ✅"
+                "Confirmar Check-In "
               )}
             </button>
           )}
         </div>
       </div>
 
-      {/* ✅ MODAL CONFIRMACIÓN DE EDICIÓN */}
+      {/* ══ MODAL EXTENDER ESTADÍA ══════════════════════════════════════ */}
+      <Modal show={showExtender} onHide={() => setShowExtender(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>📅 Extender estadía — Reserva #{id}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div className="mb-3" style={{ fontSize: 14 }}>
+            <div><b>Habitación:</b> {habitacion.numero} — {habitacion.tipo}</div>
+            <div><b>Salida actual:</b> {dayjs(rango.hasta).format("DD/MM/YYYY")}</div>
+          </div>
+          <div className="mb-3">
+            <label className="form-label">Nueva fecha de salida</label>
+            <input
+              type="date"
+              className="form-control"
+              value={nuevaFechaFin}
+              min={dayjs(rango.hasta).add(1, "day").format("YYYY-MM-DD")}
+              onChange={e => setNuevaFechaFin(e.target.value)}
+            />
+            <div className="form-text text-muted">
+              Debe ser posterior a la fecha de salida actual. El cargo adicional de
+              alojamiento se generará automáticamente.
+            </div>
+          </div>
+          {errorExtender && (
+            <Alert variant="danger" className="py-2" style={{ fontSize: 13 }}>
+              {errorExtender}
+            </Alert>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => setShowExtender(false)} disabled={extendiendo}>
+            Cancelar
+          </Button>
+          <Button variant="success" onClick={confirmarExtender} disabled={extendiendo || !nuevaFechaFin}>
+            {extendiendo
+              ? <><Spinner animation="border" size="sm" className="me-2" />Extendiendo...</>
+              : "Confirmar extensión"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/*  MODAL CONFIRMACIÓN DE EDICIÓN */}
       <Modal show={showConfirm} onHide={() => setShowConfirm(false)} centered>
         <Modal.Header closeButton>
           <Modal.Title>Confirmar actualización</Modal.Title>

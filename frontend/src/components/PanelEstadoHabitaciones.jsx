@@ -50,7 +50,6 @@ export default function PanelEstadoHabitaciones() {
 
   useEffect(() => {
     cargar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estado, tipo]);
 
   const abrirConfirm = (hab, est) => {
@@ -193,7 +192,7 @@ export default function PanelEstadoHabitaciones() {
                         onClick={() => abrirConfirm(h, "disponible")}
                         disabled={loading}
                       >
-                        ✅ Marcar disponible
+                         Marcar disponible
                       </Button>
                     </td>
                   </tr>

@@ -1,3 +1,7 @@
+
+import { pool } from "../config/database.js";
+import dayjs from "dayjs";
+
 export const obtenerEstadoHabitacion = async (req, res) => {
   const { numero } = req.params;
   const fecha = req.query.fecha;
@@ -22,7 +26,7 @@ export const obtenerEstadoHabitacion = async (req, res) => {
        WHERE r.habitacion_id = $1
          AND r.estado != 'cancelada'
          AND r.fecha_inicio <= $2
-         AND r.fecha_fin > $2  -- ✅ importante (hasta exclusivo)
+         AND r.fecha_fin > $2
        ORDER BY r.id DESC
        LIMIT 1`,
       [habitacion.id, fecha]

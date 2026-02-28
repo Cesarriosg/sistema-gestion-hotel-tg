@@ -142,7 +142,7 @@ export const anularCargo = async (req, res) => {
   }
 };
 
-// ✅ Genera (una sola vez) el cargo de alojamiento para la reserva
+// Genera (una sola vez) el cargo de alojamiento para la reserva
 export const generarCargoAlojamientoReserva = async (client, reservaId) => {
   // 1) Verificar reserva + habitacion
   const r = await client.query(
@@ -179,8 +179,7 @@ export const generarCargoAlojamientoReserva = async (client, reservaId) => {
     return { ok: true, created: false, message: "Ya existe cargo de alojamiento." };
   }
 
-  // 3) Crear cargo alojamiento (por ahora en 0 si aún no calculas tarifas aquí)
-  //    Luego lo ajustas para poner el valor real.
+  // 3) Crear cargo alojamiento 
   const ins = await client.query(
     `
     INSERT INTO cargos_reserva

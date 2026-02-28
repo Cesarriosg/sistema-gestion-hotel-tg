@@ -1,4 +1,4 @@
-// src/pages/NuevaReserva.jsx
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -42,15 +42,15 @@ export default function NuevaReserva() {
   const [desde] = useState(q.get("desde") || "");
   const [hasta] = useState(q.get("hasta") || "");
 
-  // ✅ Solución A: si viene por query, bien; si no, lo cargamos por API usando habNumero
+  //   si viene por query, bien; si no, lo cargamos por API usando habNumero
   const [tipoHabitacion, setTipoHabitacion] = useState(q.get("tipo") || "");
   const [cargandoTipo, setCargandoTipo] = useState(false);
   const [tipoErr, setTipoErr] = useState("");
 
-  // ✅ Zeus: plan predeterminado
+  //  : plan predeterminado
   const [plan, setPlan] = useState("C1");
 
-  // ✅ HU-RH2 (Zeus): titular con autocompletar
+  //    titular con autocompletar
   const [titular, setTitular] = useState({
     huesped_id: null,
     tipo_documento: "",
@@ -92,7 +92,7 @@ export default function NuevaReserva() {
     return Math.max(n, 0);
   }, [desde, hasta]);
 
-  // ✅ Solución A: cargar tipo por número (si no viene en query)
+  //    cargar tipo por número (si no viene en query)
   const cargarTipoHabitacion = async () => {
     setTipoErr("");
     if (tipoHabitacion) return;
@@ -126,7 +126,7 @@ export default function NuevaReserva() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [habNumero]);
 
-  // ✅ Zeus: autocompletar huésped por tipo_documento + documento
+  //   autocompletar huésped por tipo_documento + documento
   useEffect(() => {
     const td = (titular.tipo_documento || "").trim().toUpperCase();
     const doc = (titular.documento || "").trim();
@@ -219,7 +219,7 @@ export default function NuevaReserva() {
   const crear = async () => {
     setError("");
 
-    // ✅ Validación Zeus: nombres + primer apellido
+    //   Validación Zeus: nombres + primer apellido
     if (!titular.nombres.trim() || !titular.primer_apellido.trim()) {
       setError("Nombres y primer apellido del huésped son obligatorios.");
       return;
@@ -265,7 +265,7 @@ export default function NuevaReserva() {
           fecha_inicio: desde,
           fecha_fin: hasta,
 
-          // ✅ huésped (Zeus)
+          //   huésped 
           huesped_nombre: nombreCompleto || null, // compatibilidad
           tipo_documento: titular.tipo_documento || null,
           huesped_documento: titular.documento.trim() || null,

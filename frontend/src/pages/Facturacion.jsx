@@ -1,4 +1,4 @@
-// src/pages/Facturacion.jsx
+
 import { useEffect, useState } from "react";
 import axios from "axios";
 import dayjs from "dayjs";
@@ -72,14 +72,13 @@ export default function Facturacion() {
   useEffect(() => {
     cargarFacturas();
     cargarPagos();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // eslint-disable-line
 
   const aplicarFiltros = async () => {
     await Promise.all([cargarFacturas(), cargarPagos()]);
   };
 
-  // ✅ Obtiene factura completa para modal (cabecera + detalle) o plana (según backend)
+  //  Obtiene factura completa para modal (cabecera + detalle) o plana (según backend)
   const abrirFactura = async (facturaId) => {
     try {
       setShowFacturaModal(true);
@@ -118,7 +117,7 @@ export default function Facturacion() {
     return n.toLocaleString("es-CO", { style: "currency", currency: "COP" });
   };
 
-  // ✅ Soporta ambos formatos: {cabecera:{...}, detalle:[]} o factura plana {..., detalle:[]}
+  // Soporta ambos formatos: {cabecera:{...}, detalle:[]} o factura plana {..., detalle:[]}
   const cab = facturaSel?.cabecera ? facturaSel.cabecera : facturaSel;
 
   const detalleFactura = facturaSel?.detalle || [];
@@ -271,7 +270,7 @@ export default function Facturacion() {
         </Tab>
       </Tabs>
 
-      {/* ✅ Modal ver factura */}
+      {/*  Modal ver factura */}
       <Modal
         show={showFacturaModal}
         onHide={cerrarFacturaModal}

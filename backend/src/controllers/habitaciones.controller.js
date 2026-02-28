@@ -1,5 +1,5 @@
-// src/controllers/habitaciones.controller.js
-import { pool } from "../config/database.js"; // ajusta si tu pool está en otro path
+
+import { pool } from "../config/database.js";
 
 const ESTADOS_VALIDOS = [
   "disponible",
@@ -114,7 +114,7 @@ export const cambiarTipoHabitacion = async (req, res) => {
   }
 };
 
-// ✅ POST /api/habitaciones
+// POST /api/habitaciones
 export const crearHabitacion = async (req, res) => {
   const { numero, tipo, capacidad } = req.body || {};
 
@@ -130,8 +130,6 @@ export const crearHabitacion = async (req, res) => {
   }
 
   try {
-    // ✅ validar tipo existe y está activo (desde tu tabla de tipos)
-    // OJO: ajusta nombre de tabla/campos si tu tabla se llama diferente.
     const tx = await pool.query(
       `SELECT id
        FROM tipos_habitacion
@@ -155,7 +153,6 @@ export const crearHabitacion = async (req, res) => {
     return res.status(201).json(ins.rows[0]);
   } catch (e) {
     console.error("crearHabitacion error:", e);
-    // por si tienes UNIQUE en numero
     if (String(e?.code) === "23505") {
       return res.status(409).json({ message: "Ya existe una habitación con ese número." });
     }
@@ -163,7 +160,7 @@ export const crearHabitacion = async (req, res) => {
   }
 };
 
-// ✅ PUT /api/habitaciones/:id/tipo
+// PUT /api/habitaciones/:id/tipo
 export const actualizarTipoHabitacionDeHab = async (req, res) => {
   const { id } = req.params;
   const { tipo } = req.body || {};
@@ -200,7 +197,7 @@ export const actualizarTipoHabitacionDeHab = async (req, res) => {
 };
 
 
-// ✅ PUT /api/habitaciones/:id/activo
+// PUT /api/habitaciones/:id/activo
 export const cambiarActivoHabitacion = async (req, res) => {
   const { id } = req.params;
   const { activo } = req.body || {};
@@ -250,7 +247,7 @@ export const actualizarEstadoHabitacion = async (req, res) => {
 
     const { estado: estadoActual, activo } = actual.rows[0];
 
-    // Si está desactivada, no dejar cambiar estado (opcional pero recomendado)
+    // Si está desactivada, no dejar cambiar estado 
     if (activo === false) {
       return res.status(400).json({ message: "No puedes cambiar estado de una habitación desactivada." });
     }

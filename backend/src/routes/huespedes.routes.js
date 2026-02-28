@@ -6,19 +6,20 @@ import {
   crearHuesped,
   actualizarHuesped,
   buscarHuespedPorDocumento,
-  listarHuespedesFiltrados
+  obtenerEstadiasHuesped,
 } from "../controllers/huespedes.controller.js";
-// Si quieres protegerlas:
 import { verificarToken } from "../middlewares/authMiddleware.js";
 
 const router = Router();
 
-// Por simplicidad, sin auth en backend (igual el frontend ya usa PrivateRoute)
+// ── Estáticas — SIEMPRE antes de /:id ────────────────────────────────────────
 router.get("/buscar", verificarToken, buscarHuespedPorDocumento);
-router.get("/", listarHuespedesFiltrados);
-router.get("/", listarHuespedes);
-router.get("/:id", obtenerHuesped);
-router.post("/", crearHuesped);
-router.put("/:id", actualizarHuesped);
+router.get("/",       verificarToken, listarHuespedes);
+
+// ── Con parámetro /:id ────────────────────────────────────────────────────────
+router.get("/:id/estadias", verificarToken, obtenerEstadiasHuesped);
+router.get("/:id",          verificarToken, obtenerHuesped);
+router.post("/",            verificarToken, crearHuesped);
+router.put("/:id",          verificarToken, actualizarHuesped);
 
 export default router;

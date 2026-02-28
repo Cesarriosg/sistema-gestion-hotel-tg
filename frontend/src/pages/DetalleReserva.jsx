@@ -1,4 +1,4 @@
-// src/pages/DetalleReserva.jsx
+
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -25,7 +25,7 @@ const getAuthHeaders = () => {
 
 const safeJson = (v) => {
   if (!v) return null;
-  if (typeof v === "object") return v; // JSONB ya llega como objeto
+  if (typeof v === "object") return v; 
   try {
     return JSON.parse(v);
   } catch {
@@ -89,9 +89,9 @@ export default function DetalleReserva() {
   const [cantCargo, setCantCargo] = useState(1);
   const [valorCargo, setValorCargo] = useState("");
 
-  // ==========================
-  // ✅ HU-RH3: Editar huésped
-  // ==========================
+
+  //  Editar huésped
+
   const [showEditH, setShowEditH] = useState(false);
   const [showConfirmH, setShowConfirmH] = useState(false);
   const [loadingH, setLoadingH] = useState(false);
@@ -114,9 +114,9 @@ export default function DetalleReserva() {
     fecha_expedicion: "",
   });
 
-  // ==========================
-  // ✅ HU-RH6: Editar acompañantes
-  // ==========================
+  
+  //  Editar acompañantes
+  
   const [showEditA, setShowEditA] = useState(false);
   const [savingA, setSavingA] = useState(false);
   const [errA, setErrA] = useState("");
@@ -153,7 +153,7 @@ export default function DetalleReserva() {
       setDetalles(data.detalles || []);
       setResumen(data.resumen || null);
 
-      // ✅ también cargar asociados
+      //    también cargar asociados
       await cargarAsociados();
     } catch (e) {
       console.error("Error cargando finanzas:", e);
@@ -165,7 +165,6 @@ export default function DetalleReserva() {
 
   useEffect(() => {
     cargarDatos();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const registrarPago = async (e) => {
@@ -316,9 +315,9 @@ export default function DetalleReserva() {
   const precioNocheMostrar = snap?.precio_noche ?? null;
   const totalMostrar = snap?.total ?? null;
 
-  // ==========================
-  // ✅ HU-RH3: abrir modal editar huésped
-  // ==========================
+  
+  //    abrir modal editar huésped
+  
   const abrirEditarHuesped = async () => {
     setErrH("");
 
@@ -402,9 +401,9 @@ export default function DetalleReserva() {
     }
   };
 
-  // ==========================
-  // ✅ HU-RH6: acompañantes (modal)
-  // ==========================
+  
+  //   acompañantes (modal)
+  
   const abrirEditarAcompanantes = () => {
     setErrA("");
 
@@ -601,7 +600,7 @@ export default function DetalleReserva() {
                 </Card.Body>
               </Card>
 
-              {/* ✅ Huéspedes asociados */}
+              {/*    Huéspedes asociados */}
               <Card className="shadow-sm mt-3">
                 <Card.Body>
                   <Card.Title className="mb-2 d-flex justify-content-between align-items-center">
@@ -745,7 +744,7 @@ export default function DetalleReserva() {
 
                       {puedeCheckout && (
                         <Button className="mt-2" variant="dark" onClick={hacerCheckout} disabled={haciendoCheckout}>
-                          {haciendoCheckout ? "Realizando check-out..." : "✅ Confirmar Check-Out final"}
+                          {haciendoCheckout ? "Realizando check-out..." : "   Confirmar Check-Out final"}
                         </Button>
                       )}
                     </>
@@ -923,7 +922,7 @@ export default function DetalleReserva() {
           </Row>
 
           {/* ==========================
-              ✅ Modal: editar huésped
+                 Modal: editar huésped
              ========================== */}
           <Modal show={showEditH} onHide={() => setShowEditH(false)} centered size="lg">
             <Modal.Header closeButton>
@@ -1048,7 +1047,7 @@ export default function DetalleReserva() {
           </Modal>
 
           {/* ==========================
-              ✅ Modal: confirmación editar huésped
+                 Modal: confirmación editar huésped
              ========================== */}
           <Modal show={showConfirmH} onHide={() => setShowConfirmH(false)} centered>
             <Modal.Header closeButton>
@@ -1075,7 +1074,7 @@ export default function DetalleReserva() {
           </Modal>
 
           {/* ==========================
-              ✅ Modal: editar acompañantes
+                 Modal: editar acompañantes
              ========================== */}
           <Modal show={showEditA} onHide={() => setShowEditA(false)} centered size="lg">
             <Modal.Header closeButton>

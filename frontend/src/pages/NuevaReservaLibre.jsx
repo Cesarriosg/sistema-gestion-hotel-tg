@@ -1,4 +1,4 @@
-// src/pages/NuevaReservaLibre.jsx
+
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
@@ -133,9 +133,9 @@ export default function NuevaReservaLibre() {
           huesped_email: email.trim() || null,
           notas: notas.trim() || null,
 
-          // ✅ nuevo
+          
           plan,
-          tarifa_snapshot: precioNoche, // congela precio/noche al crear (recomendado)
+          tarifa_snapshot: precioNoche, // congela precio/noche al crear 
         },
         { headers: getAuthHeaders() }
       );

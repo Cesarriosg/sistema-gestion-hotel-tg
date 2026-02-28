@@ -1,4 +1,4 @@
-// src/controllers/facturacion.controller.js
+
 import { pool } from "../config/database.js";
 import dayjs from "dayjs";
 
@@ -201,7 +201,6 @@ export const facturarReserva = async (req, res) => {
     });
 
     // 6) Total factura (por ahora: solo alojamiento)
-    // (Luego, cargos adicionales se agregarán como líneas y se actualizará facturas.total)
     const totalFactura = Number(totalAlojamiento);
 
     // 7) Crear factura

@@ -1,17 +1,17 @@
-// src/controllers/channex.controller.js
+
 import axios from "axios";
 import { otaCrearOActualizarReservaSandbox } from "./otas.controller.js";
 
 export const channexWebhook = async (req, res) => {
   try {
-    // 1️⃣ Channex SIEMPRE espera 200 OK
+    // 1️Channex SIEMPRE espera 200 OK
     res.status(200).json({ ok: true });
 
     const { booking_revision_id } = req.body;
 
     if (!booking_revision_id) return;
 
-    // 2️⃣ Pedimos la reserva completa a Channex
+    // 2️ P-edimos la reserva completa a Channex
     const booking = await axios.get(
       `https://staging.channex.io/api/v1/booking_revisions/${booking_revision_id}`,
       {
@@ -23,7 +23,7 @@ export const channexWebhook = async (req, res) => {
 
     const data = booking.data.data;
 
-    // 3️⃣ Normalizamos a tu formato interno
+    // 3 Normalizamos a tu formato interno
     await otaCrearOActualizarReservaSandbox(
       {
         body: {

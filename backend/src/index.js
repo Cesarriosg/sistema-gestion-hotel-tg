@@ -23,10 +23,10 @@ import otasRoutes from "./routes/otas.routes.js";
 
 dotenv.config();
 
-// ✅ 1. Crear app primero
+
 const app = express();
 
-// ✅ 2. Middlewares
+// Middlewares
 app.use(cors({
   origin: "http://localhost:3000",
   methods: ["GET","POST","PUT","DELETE"],
@@ -35,10 +35,10 @@ app.use(cors({
 
 app.use(express.json());
 
-// ✅ 3. Crear servidor HTTP
+//  Crear servidor HTTP
 const server = http.createServer(app);
 
-// ✅ 4. Socket.IO
+//  Socket.IO
 const io = new SocketIOServer(server, {
   cors: {
     origin: "http://localhost:3000",
@@ -57,7 +57,7 @@ io.on("connection", (socket) => {
   );
 });
 
-// ✅ 5. Rutas
+// Rutas
 app.use("/api", hotelRoutes);
 app.use("/api/huespedes", huespedesRoutes);
 app.use("/api/habitaciones", habitacionesRoutes);
@@ -74,7 +74,6 @@ app.use("/api/tipos-habitacion", tiposHabitacionRoutes);
 app.use("/api/usuarios", usuariosRoutes);
 app.use("/api/otas", otasRoutes);
 
-// ✅ 6. Escuchar con server (NO app.listen)
 const PORT = process.env.PORT || 4000;
 
 server.listen(PORT, () => {

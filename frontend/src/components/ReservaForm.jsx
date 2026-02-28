@@ -29,7 +29,7 @@ export default function ReservaForm({ onClose, onReservaCreada }) {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
-  // 🔍 Buscar huésped automáticamente cuando se escribe el documento
+  // Buscar huésped automáticamente cuando se escribe el documento
   const buscarHuesped = async (doc) => {
     try {
       const res = await axios.get(
@@ -42,10 +42,8 @@ export default function ReservaForm({ onClose, onReservaCreada }) {
         setTelefono(res.data.huesped.telefono || "");
         setEmail(res.data.huesped.email || "");
       } else {
-        // si no encuentra, no borro lo que el usuario ya pudo escribir
       }
     } catch {
-      // silencioso
     }
   };
 
@@ -86,7 +84,6 @@ export default function ReservaForm({ onClose, onReservaCreada }) {
     }
   };
 
-  // Si cambian fechas/tipo, invalidamos selección
   useEffect(() => {
     setDisponibles([]);
     setHabSeleccionada("");
@@ -120,8 +117,8 @@ export default function ReservaForm({ onClose, onReservaCreada }) {
         { headers: getAuthHeaders() }
       );
 
-      onReservaCreada?.(); // refrescar rack/listados
-      onClose?.();         // cerrar modal
+      onReservaCreada?.(); 
+      onClose?.();        
     } catch (e) {
       const status = e?.response?.status;
       const msg = e?.response?.data?.message;

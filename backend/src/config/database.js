@@ -15,8 +15,8 @@ export const pool = new Pool({
 
 export default pool;
 
-// ✅ Probar conexión sin dejar clientes abiertos
 pool
   .query("SELECT NOW()")
-  .then((r) => console.log("✅ Conectado a PostgreSQL:", r.rows[0].now))
+  .then((r) => console.log(" Conectado a PostgreSQL:", r.rows[0].now))
   .catch((e) => console.error("❌ Error al conectar a PostgreSQL:", e.message));
+

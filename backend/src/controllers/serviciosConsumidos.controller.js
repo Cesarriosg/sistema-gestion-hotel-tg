@@ -15,7 +15,7 @@ export const registrarConsumo = async (req, res) => {
 
     await pool.query(query, [reserva_id, servicio_id, costo]);
 
-    return res.json({ mensaje: "Servicio registrado correctamente ✅" });
+    return res.json({ mensaje: "Servicio registrado correctamente " });
 
   } catch (error) {
     console.error(error);

@@ -1,4 +1,4 @@
-// src/controllers/pagos.controller.js
+
 import { pool } from "../config/database.js";
 
 /**

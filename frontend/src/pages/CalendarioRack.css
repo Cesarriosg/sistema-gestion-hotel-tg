@@ -29,3 +29,75 @@
 .modalBox .cerrar {
   background: #cc3333;
 }
+
+/* ====== FULLCALENDAR RACK - estilo tipo ZEUS ====== */
+
+/* Compacta un poco el header y el cuerpo */
+.fc .fc-toolbar-title {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.fc .fc-timeline-header-row {
+  height: 34px; /* header más compacto */
+}
+
+/* Quita subfila de labels (por si FullCalendar la renderiza) */
+.fc .fc-timeline-slot-label-row:last-child {
+  display: none !important;
+}
+
+/* Haz el grid más limpio */
+.fc .fc-timeline-slot-frame {
+  background: #fff;
+}
+
+/* Líneas suaves (menos “cuadriculado duro”) */
+.fc .fc-timeline-slots td,
+.fc .fc-timeline-lane td {
+  border-color: #e9ecef !important;
+}
+
+/*  “PEGAR” las 2 mitades del día:
+   - quitamos el borde entre la 1ra mitad y la 2da mitad
+   Como el slot es 12h, cada día tiene 2 columnas.
+   Entonces: a las columnas pares (2,4,6...) quitamos border-left
+*/
+.fc .fc-timeline-slots td:nth-child(2n),
+.fc .fc-timeline-lane td:nth-child(2n) {
+  border-left: none !important;
+}
+
+/* Y marcamos inicio de cada día (columna impar) con un borde un poquito más visible */
+.fc .fc-timeline-slots td:nth-child(2n+1),
+.fc .fc-timeline-lane td:nth-child(2n+1) {
+  border-left: 1px solid #d8dde3 !important;
+}
+
+/* Filas (habitaciones) más compactas */
+.fc .fc-timeline-lane-frame {
+  min-height: 48px;  /* altura fila */
+}
+
+/* Eventos estilo “pill” más Zeus */
+.fc .fc-timeline-event {
+  border-radius: 10px !important;
+  padding: 2px 6px !important;
+  border: none !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.10);
+}
+
+/* Texto del evento mejor alineado */
+.fc .fc-event-title {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: normal;
+  line-height: 1.1;
+}
+
+/* Opcional: reduce subrayado azul del label (parece link) */
+.fc .fc-timeline-slot-cushion {
+  text-decoration: none !important;
+  font-weight: 700;
+}
+

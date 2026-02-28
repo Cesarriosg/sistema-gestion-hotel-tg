@@ -1,244 +1,106 @@
-// src/App.js
-import { BrowserRouter, Routes, Route } from "react-router-dom";
 
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { useAuth } from "./context/AuthContext";
+import Navbar from "./layouts/Navbar";
+
+// Páginas
 import Login from "./pages/Login";
-import Panel from "./pages/Panel";
-import MainLayout from "./layouts/MainLayout";
-import PrivateRoute from "./routes/PrivateRoute";
-
+import Dashboard from "./pages/Dashboard";
 import CalendarioRack from "./pages/CalendarioRack";
-import CheckIn from "./pages/CheckIn";
-import NuevaReserva from "./pages/NuevaReserva";
-import NuevoWalkIn from "./pages/NuevoWalkIn";
 import Reservas from "./pages/Reservas";
-import DetalleReserva from "./pages/DetalleReserva";
-import Huespedes from "./pages/Huespedes";
-import Habitaciones from "./pages/Habitaciones";
-import Facturacion from "./pages/Facturacion";
+import NuevaReserva from "./pages/NuevaReserva";
 import NuevaReservaLibre from "./pages/NuevaReservaLibre";
-import NuevoBloqueo from "./pages/NuevoBloqueo";
+import CheckIn from "./pages/CheckIn";
+import NuevoWalkIn from "./pages/NuevoWalkIn";
+import Huespedes from "./pages/Huespedes";
 import CargosReserva from "./pages/CargosReserva";
-import AuditoriaCargos from "./pages/AuditoriaCargos";
+import Facturacion from "./pages/Facturacion";
+import NuevoBloqueo from "./pages/NuevoBloqueo";
+import Habitaciones from "./pages/Habitaciones";
+import Tarifas from "./pages/Tarifas";
 import Usuarios from "./pages/Usuarios";
+import ConfigHotel from "./pages/ConfigHotel";
+import CierreDia from "./pages/CierreDia";
+
+// Layout con Navbar 
+function LayoutPrincipal() {
+  return (
+    <div style={{ minHeight: "100vh", background: "#f4f6f9" }}>
+      <Navbar />
+      <div style={{ padding: "20px" }}>
+        <Outlet />
+      </div>
+    </div>
+  );
+}
+
+// Guard: redirige a /login si no hay sesión
+function PrivateRoute() {
+  const { usuario, cargando } = useAuth();
+  if (cargando) return null;
+  return usuario ? <Outlet /> : <Navigate to="/login" replace />;
+}
+
+// Guard: solo admin, redirige al dashboard si no tiene permisos
+function AdminRoute() {
+  const { usuario } = useAuth();
+  return usuario?.rol === "admin" ? <Outlet /> : <Navigate to="/dashboard" replace />;
+}
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* ===================== */}
-        {/* RUTAS PÚBLICAS */}
-        {/* ===================== */}
-        <Route path="/" element={<Login />} />
+
+        {/* Ruta pública */}
         <Route path="/login" element={<Login />} />
 
-        {/* ===================== */}
-        {/* RACK / PANTALLA PRINCIPAL */}
-        {/* ===================== */}
-        <Route
-          path="/calendario"
-          element={
-            <PrivateRoute>
-              <MainLayout>
-                <CalendarioRack />
-              </MainLayout>
-            </PrivateRoute>
-          }
-        />
+        {/* Rutas protegidas — un único LayoutPrincipal con Navbar */}
+        <Route element={<PrivateRoute />}>
+          <Route element={<LayoutPrincipal />}>
 
-        {/* ===================== */}
-        {/* BLOQUEOS */}
-        {/* ===================== */}
-        <Route
-          path="/bloqueos/nuevo"
-          element={
-            <PrivateRoute>
-              <MainLayout>
-                <NuevoBloqueo />
-              </MainLayout>
-            </PrivateRoute>
-          }
-        />
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard"  element={<Dashboard />} />
 
-        {/* ===================== */}
-        {/* CARGOS POR RESERVA */}
-        {/* ===================== */}
-        <Route
-          path="/reservas/:id/cargos"
-          element={
-            <PrivateRoute>
-              <MainLayout>
-                <CargosReserva />
-              </MainLayout>
-            </PrivateRoute>
-          }
-        />
+            {/* Redirige rutas antiguas */}
+            <Route path="/panel"      element={<Navigate to="/dashboard" replace />} />
+            <Route path="/calendario" element={<CalendarioRack />} />
+            <Route path="/rack"       element={<CalendarioRack />} />
 
-        {/* ===================== */}
-        {/* ✅ AUDITORÍA GLOBAL */}
-        {/* ===================== */}
-        <Route
-          path="/auditoria/cargos-folios"
-          element={
-            <PrivateRoute>
-              <MainLayout>
-                <AuditoriaCargos />
-              </MainLayout>
-            </PrivateRoute>
-          }
-        />
+            {/* Reservas */}
+            <Route path="/reservas"               element={<Reservas />} />
+            <Route path="/reservas/nueva"         element={<NuevaReservaLibre />} />
+            <Route path="/reservas/nueva-manual"  element={<NuevaReserva />} />
+            {/* IMPORTANTE: rutas estáticas antes de /:id */}
+            <Route path="/reservas/:id/cargos"    element={<CargosReserva />} />
+            <Route path="/reservas/:id"           element={<CargosReserva />} />
 
-        {/* ===================== */}
-        {/* PANEL SOLO ADMIN */}
-        {/* ===================== */}
-        <Route
-          path="/panel"
-          element={
-            <PrivateRoute roles={["admin"]}>
-              <MainLayout>
-                <Panel />
-              </MainLayout>
-            </PrivateRoute>
-          }
-        />
+            {/* Recepción */}
+            <Route path="/checkin/:id"   element={<CheckIn />} />
+            <Route path="/walkin/nuevo"  element={<NuevoWalkIn />} />
+            <Route path="/huespedes"     element={<Huespedes />} />
 
-        {/* ===================== */}
-        {/* RESERVAS */}
-        {/* ===================== */}
-        <Route
-          path="/reservas"
-          element={
-            <PrivateRoute>
-              <MainLayout>
-                <Reservas />
-              </MainLayout>
-            </PrivateRoute>
-          }
-        />
+            {/* Bloqueos */}
+            <Route path="/bloqueos/nuevo" element={<NuevoBloqueo />} />
 
-        <Route
-          path="/reservas/nueva-manual"
-          element={
-            <PrivateRoute>
-              <MainLayout>
-                <NuevaReservaLibre />
-              </MainLayout>
-            </PrivateRoute>
-          }
-        />
+            {/* Facturación y auditoría */}
+            <Route path="/facturacion" element={<Facturacion />} />
+            <Route path="/cierre-dia"  element={<CierreDia />} />
 
-        <Route
-          path="/reservas/:id"
-          element={
-            <PrivateRoute>
-              <MainLayout>
-                <DetalleReserva />
-              </MainLayout>
-            </PrivateRoute>
-          }
-        />
+            {/* Solo administrador */}
+            <Route element={<AdminRoute />}>
+              <Route path="/habitaciones" element={<Habitaciones />} />
+              <Route path="/tarifas"      element={<Tarifas />} />
+              <Route path="/usuarios"     element={<Usuarios />} />
+              <Route path="/config-hotel" element={<ConfigHotel />} />
+            </Route>
 
-        {/* ===================== */}
-        {/* NUEVA RESERVA / WALK-IN */}
-        {/* ===================== */}
-        <Route
-          path="/reservas/nueva"
-          element={
-            <PrivateRoute>
-              <MainLayout>
-                <NuevaReserva />
-              </MainLayout>
-            </PrivateRoute>
-          }
-        />
+          </Route>
+        </Route>
 
-        <Route
-          path="/walkin/nuevo"
-          element={
-            <PrivateRoute>
-              <MainLayout>
-                <NuevoWalkIn />
-              </MainLayout>
-            </PrivateRoute>
-          }
-        />
+        {/* Cualquier ruta no encontrada va al dashboard */}
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
 
-        {/* ===================== */}
-        {/* CHECK-IN */}
-        {/* ===================== */}
-        <Route
-          path="/checkin/:id"
-          element={
-            <PrivateRoute>
-              <MainLayout>
-                <CheckIn />
-              </MainLayout>
-            </PrivateRoute>
-          }
-        />
-
-        {/* ===================== */}
-        {/* MÓDULOS GENERALES */}
-        {/* ===================== */}
-        <Route
-          path="/huespedes"
-          element={
-            <PrivateRoute>
-              <MainLayout>
-                <Huespedes />
-              </MainLayout>
-            </PrivateRoute>
-          }
-        />
-
-        {/* ✅ si esta pantalla es administración, déjala SOLO ADMIN */}
-        <Route
-          path="/habitaciones"
-          element={
-            <PrivateRoute roles={["admin"]}>
-              <MainLayout>
-                <Habitaciones />
-              </MainLayout>
-            </PrivateRoute>
-          }
-        />
-
-        {/* ===================== */}
-        {/* FACTURACIÓN */}
-        {/* ===================== */}
-        <Route
-          path="/facturacion"
-          element={
-            <PrivateRoute>
-              <MainLayout>
-                <Facturacion />
-              </MainLayout>
-            </PrivateRoute>
-          }
-        />
-
-        {/* ===================== */}
-        {/* SOLO ADMIN */}
-        {/* ===================== */}
-        <Route
-          path="/configuracion"
-          element={
-            <PrivateRoute roles={["admin"]}>
-              <MainLayout>Configuración</MainLayout>
-            </PrivateRoute>
-          }
-        />
-
-        {/* ✅ AQUÍ EL CAMBIO CLAVE */}
-        <Route
-          path="/usuarios"
-          element={
-            <PrivateRoute roles={["admin"]}>
-              <MainLayout>
-                <Usuarios />
-              </MainLayout>
-            </PrivateRoute>
-          }
-        />
       </Routes>
     </BrowserRouter>
   );

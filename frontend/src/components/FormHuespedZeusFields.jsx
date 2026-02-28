@@ -1,8 +1,6 @@
 import { Row, Col, Form } from "react-bootstrap";
 
 export default function FormHuespedZeusFields({ value, onChange, disabled = false }) {
-  // value = objeto huésped
-  // onChange = (patch) => setValue(prev => ({...prev, ...patch}))
   const set = (k) => (e) => onChange({ [k]: e.target.value });
 
   return (

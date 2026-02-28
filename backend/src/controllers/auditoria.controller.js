@@ -1,4 +1,3 @@
-// src/controllers/auditoria.controller.js
 import dayjs from "dayjs";
 import { pool } from "../config/database.js";
 import { calcularTotalAlojamiento } from "./facturacion.controller.js";
@@ -172,7 +171,7 @@ export const previewAlojamiento = async (req, res) => {
 /**
  * POST /api/auditoria/generar-alojamiento
  * Genera cargos de alojamiento del día operativo para TODAS las ocupadas.
- * ✅ Idempotente: si ya existe (reserva_id + fecha + referencia AUDITORIA), NO lo duplica.
+ *  Idempotente: si ya existe (reserva_id + fecha + referencia AUDITORIA), NO lo duplica.
  */
 export const generarCargosAlojamiento = async (req, res) => {
   const client = await pool.connect();
@@ -226,7 +225,7 @@ export const generarCargosAlojamiento = async (req, res) => {
     for (const r of ocupadas) {
       const plan = (r.plan || "C1").trim();
 
-      // ✅ anti-duplicado (por reserva + fecha del cargo)
+      // anti-duplicado (por reserva + fecha del cargo)
       const existe = await client.query(
         `
         SELECT id
@@ -326,10 +325,6 @@ export const cierreDelDia = async (req, res) => {
     // 1) ejecutar auditoría (reutilizamos la lógica aquí mismo)
     const fechaOperativa = await getFechaOperativa(client);
 
-    // genera (idempotente)
-    // ojo: llamamos la misma lógica pero dentro de la tx
-    // hacemos una ejecución simple:
-    // (re-implementado en mini para no abrir otro client)
     const resp = await (async () => {
       const fechaFinDia = dayjs(fechaOperativa).add(1, "day").format("YYYY-MM-DD");
 

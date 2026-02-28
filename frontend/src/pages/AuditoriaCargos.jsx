@@ -1,4 +1,3 @@
-// src/pages/AuditoriaCargos.jsx
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { Button, Badge } from "react-bootstrap";

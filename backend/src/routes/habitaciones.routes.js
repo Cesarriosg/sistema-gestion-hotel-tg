@@ -8,8 +8,10 @@ import {
   crearHabitacion,
   actualizarTipoHabitacionDeHab,
   cambiarActivoHabitacion,
-  actualizarPlanYTarifaHabitacion
+  actualizarPlanYTarifaHabitacion,
 } from "../controllers/habitaciones.controller.js";
+
+import { listarHabitacionesDisponibles } from "../controllers/reservas.controller.js";
 
 const router = Router();
 
@@ -17,6 +19,9 @@ router.get("/", verificarToken, listarHabitaciones);
 
 // fijas
 router.get("/por-numero/:numero", verificarToken, obtenerHabitacionPorNumero);
+
+router.get("/disponibles", verificarToken, listarHabitacionesDisponibles);
+
 
 // admin
 router.post("/", verificarToken, crearHabitacion);

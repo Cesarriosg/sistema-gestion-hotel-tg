@@ -1,5 +1,5 @@
 // src/pages/CalendarioRack.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import FullCalendar from "@fullcalendar/react";
 import resourceTimelinePlugin from "@fullcalendar/resource-timeline";
@@ -7,8 +7,9 @@ import interactionPlugin from "@fullcalendar/interaction";
 import dayjs from "dayjs";
 import "dayjs/locale/es";
 import { useNavigate } from "react-router-dom";
-import { Modal, Button, Form, Badge } from "react-bootstrap";
+import { Modal, Button, Form, Badge, Nav, Row, Col, Spinner } from "react-bootstrap";
 import {io} from "socket.io-client";
+import "./CalendarioRack.css"
 
 dayjs.locale("es");
 
@@ -32,11 +33,13 @@ const badgeVariant = (estado) => {
 
 // rango [inicio, fin)
 const enRango = (hoy, inicio, fin) => {
-  const H = dayjs(hoy);
-  const I = dayjs(inicio);
-  const F = dayjs(fin);
-  return !H.isBefore(I, "day") && H.isBefore(F, "day");
+  const H = dayjs(hoy).startOf("day");
+  const I = dayjs(inicio).startOf("day");
+  const F = dayjs(fin).startOf("day");
+  return (H.isSame(I) || H.isAfter(I)) && H.isBefore(F)
 };
+
+
 
 // prioridad: mantenimiento > bloqueo adm > ocupada > reservada > disponible
 const calcularEstadoOperativo = ({ fechaSistema, roomNumero, reservas, bloqueos }) => {
@@ -67,10 +70,13 @@ const calcularEstadoOperativo = ({ fechaSistema, roomNumero, reservas, bloqueos 
   return "disponible";
 };
 
+
+
 export default function CalendarioRack() {
   const [resources, setResources] = useState([]); // habitaciones con estado_operativo
   const [events, setEvents] = useState([]);
-  const [fechaSistema, setFechaSistema] = useState(dayjs().format("YYYY-MM-DD"));
+  const [fechaSistema, setFechaSistema] = useState(null);
+  const [loadingFecha, setLoadingFecha] = useState(true);
 
   // filtros tipo Zeus
   const [fEstado, setFEstado] = useState("todas");
@@ -86,6 +92,20 @@ export default function CalendarioRack() {
   const [eventoSel, setEventoSel] = useState(null);
   const [showEventModal, setShowEventModal] = useState(false);
 
+  // ── Extender estadía desde rack ──────────────────────────────────────────
+  const [showExtenderModal,  setShowExtenderModal]  = useState(false);
+  const [extenderFechaFin,   setExtenderFechaFin]   = useState("");
+  const [extendiendo,        setExtendiendo]        = useState(false);
+  const [extenderError,      setExtenderError]      = useState("");
+
+  // ── No-show desde rack ────────────────────────────────────────────────────
+  const [showNoShowModal,    setShowNoShowModal]    = useState(false);
+  const [noShowCargando,     setNoShowCargando]     = useState(false);
+  const [noShowError,        setNoShowError]        = useState("");
+
+  // ── PDF registro hotelero desde rack ─────────────────────────────────────
+  const [generandoPdfRack,   setGenerandoPdfRack]   = useState(false);
+
   // editar reserva
   const [showEditModal, setShowEditModal] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
@@ -93,23 +113,88 @@ export default function CalendarioRack() {
   const [editDesde, setEditDesde] = useState("");
   const [editHasta, setEditHasta] = useState("");
   const [editNotas, setEditNotas] = useState("");
+  const [editHabNumero, setEditHabNumero] = useState("");
+  const [editTabActiva, setEditTabActiva] = useState("reserva");
+  const [editTitular, setEditTitular] = useState(null);
+  const [editHabitaciones, setEditHabitaciones] = useState([]);
 
-  // ✅ Modal cambiar estado habitación
+
+  //  Modal cambiar estado habitación
   const [showEstadoModal, setShowEstadoModal] = useState(false);
   const [habSel, setHabSel] = useState(null); // {dbId, numero, tipo, estado_operativo, estado_base}
   const [nuevoEstado, setNuevoEstado] = useState("");
   const [estadoLoading, setEstadoLoading] = useState(false);
   const [estadoError, setEstadoError] = useState("");
 
-  const navigate = useNavigate();
+  const rackLoadingRef = useRef(false);
+  const calendarRef = useRef(null);
+  //  FIX: ref para que los closures de socket/visibilitychange siempre lean
+  //         la fecha actualizada, sin importar cuándo se registraron.
+  const fechaSistemaRef = useRef(null);
 
-  useEffect(() => {
-  socket.on("rack:update", () => {
-    cargarRack();
-  });
+const cargarRackSeguro = async () => {
+  if (rackLoadingRef.current) return;
+  rackLoadingRef.current = true;
+  try {
+    await cargarRack();
+  } finally {
+    rackLoadingRef.current = false;
+  }
+};
+
+  const navigate = useNavigate();
+  const [editBuscando, setEditBuscando] = useState(false);
+
+  // ── Buscar huésped por documento (llamado explícitamente) ────────────────
+  const buscarHuespedParaEditar = async () => {
+    if (!editTitular) return;
+    const td  = (editTitular.tipo_documento || "").trim().toUpperCase();
+    const doc = (editTitular.documento || "").trim();
+    if (!td || !doc) return;
+
+    setEditBuscando(true);
+    try {
+      const r = await axios.get(`${API}/api/huespedes/buscar`, {
+        params: { tipo_documento: td, documento: doc },
+        headers: getAuthHeaders(),
+      });
+      // Encontrado → autocompletar
+      setEditTitular(prev => ({
+        ...prev,
+        huesped_id:       r.data.id,
+        nombres:          r.data.nombres          || "",
+        primer_apellido:  r.data.primer_apellido  || "",
+        segundo_apellido: r.data.segundo_apellido || "",
+        telefono:         r.data.telefono         || "",
+        email:            r.data.email            || "",
+      }));
+    } catch {
+      // 404 = no existe → limpiar campos para entrada manual
+      setEditTitular(prev => ({
+        ...prev,
+        huesped_id:       null,
+        nombres:          "",
+        primer_apellido:  "",
+        segundo_apellido: "",
+        telefono:         "",
+        email:            "",
+      }));
+    } finally {
+      setEditBuscando(false);
+    }
+  };
+
+useEffect(() => {
+  //  FIX: el handler lee fechaSistemaRef en el momento que se ejecuta,
+  //         no el valor que tenía cuando se registró el listener.
+  const handler = () => {
+    if (fechaSistemaRef.current) cargarRackSeguro();
+  };
+
+  socket.on("rack:update", handler);
 
   return () => {
-    socket.off("rack:update");
+    socket.off("rack:update", handler);
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
@@ -123,29 +208,58 @@ export default function CalendarioRack() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ Cada vez que cambie fechaSistema, recarga el rack para recalcular estado_operativo
-  useEffect(() => {
-  const t = setInterval(() => {
-    cargarRack();
-  }, 10000); // cada 10
-
-  return () => clearInterval(t);
+useEffect(() => {
+  //  FIX: mantener ref sincronizado para que socket/visibilitychange lo lean
+  fechaSistemaRef.current = fechaSistema;
+  if (fechaSistema) cargarRackSeguro();
   // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [fechaSistema]);
+
+useEffect(() => {
+  //  FIX: guardar cargarRackSeguro en ref para que visibilitychange
+  //         siempre use la versión actualizada con fechaSistema correcto.
+  const onVis = () => {
+    if (document.visibilityState === "visible" && fechaSistemaRef.current) {
+      cargarRackSeguro();
+    }
+  };
+  document.addEventListener("visibilitychange", onVis);
+  return () => document.removeEventListener("visibilitychange", onVis);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+
+useEffect(()=>{
+  if (!fechaSistema) return;
+  const api = calendarRef.current?.getApi?.();
+  if (!api) return;
+  
+  api.gotoDate(fechaSistema);
 }, [fechaSistema]);
 
 
   const obtenerFechaSistema = async () => {
-    try {
-      const r = await axios.get(`${API}/api/config/fecha-sistema`, {
-        headers: getAuthHeaders(),
-      });
-      setFechaSistema(dayjs(r.data.fecha).format("YYYY-MM-DD"));
-    } catch (e) {
-      console.error("Error obteniendo fecha del sistema:", e);
-    }
-  };
+  try {
+    setLoadingFecha(true);
+    const r = await axios.get(`${API}/api/config/fecha-sistema`, {
+      headers: getAuthHeaders(),
+    });
+
+    const f = dayjs(r.data.fecha).format("YYYY-MM-DD");
+    setFechaSistema(f);
+  } catch (e) {
+    console.error("Error obteniendo fecha del sistema:", e);
+    // fallback (opcional): si falla backend, usa la del PC para no romper
+    setFechaSistema(dayjs().format("YYYY-MM-DD"));
+  } finally {
+    setLoadingFecha(false);
+  }
+};
 
   const cargarRack = async () => {
+    //  FIX: leer el ref, no el closure. Así funciona desde socket y visibilitychange.
+    const fechaActual = fechaSistemaRef.current;
+    if (!fechaActual) return; // aún no tenemos fecha, no calcular
+
     try {
       const [habsR, reservasR] = await Promise.all([
         axios.get(`${API}/api/habitaciones`, { headers: getAuthHeaders() }),
@@ -167,10 +281,10 @@ export default function CalendarioRack() {
       const habs = habsR.data || [];
       const reservas = reservasR.data || [];
 
-      // ✅ habitaciones con estado_operativo (ZEUS: depende de fechaSistema)
+      //  habitaciones con estado_operativo (ZEUS: depende de fechaSistema)
       const habitaciones = habs.map((h) => {
         const estado_operativo = calcularEstadoOperativo({
-          fechaSistema,
+          fechaSistema: fechaActual,   //  usa ref, no el closure
           roomNumero: h.numero,
           reservas,
           bloqueos,
@@ -181,54 +295,63 @@ export default function CalendarioRack() {
           numero: String(h.numero),
           tipo: h.tipo,
           estado_base: h.estado, // lo guardado en DB (informativo)
-          estado_operativo, // ✅ manda para HOY
+          estado_operativo, //  manda para HOY
         };
       });
 
       setResources(habitaciones);
 
       // eventos reservas
-      const eventosReservas = reservas.map((r) => ({
-        id: `R-${r.id}`,
-        resourceId: String(r.habitacion_numero),
-        title: r.huesped_nombre,
-        start: r.fecha_inicio,
-        end: r.fecha_fin,
-        display: "block",
-        color:
-          r.estado === "ocupada"
-            ? "#0f7b27"
-            : r.estado === "cancelada"
-            ? "#888888"
-            : r.estado === "finalizada"
-            ? "#555555"
-            : "#1d6eca",
-        extendedProps: {
-          kind: "reserva",
-          reserva_id: r.id,
-          estado: r.estado,
-          habitacion_numero: r.habitacion_numero,
-        },
-      }));
+      const eventosReservas = reservas.map((r) => {
+  const startISO = buildReservaStart(r.fecha_inicio);
+  const endISO = buildReservaEnd(r.fecha_fin, startISO);
+
+  return {
+    id: `R-${r.id}`,
+    resourceId: String(r.habitacion_numero),
+    title: r.huesped_nombre,
+    start: startISO,
+    end: endISO,
+    display: "block",
+    color:
+      r.estado === "ocupada"
+        ? "#0f7b27"
+        : r.estado === "cancelada"
+        ? "#888888"
+        : r.estado === "finalizada"
+        ? "#555555"
+        : "#1d6eca",
+    extendedProps: {
+      kind: "reserva",
+      reserva_id: r.id,
+      estado: r.estado,
+      habitacion_numero: r.habitacion_numero,
+    },
+  };
+});
 
       // eventos bloqueos
-      const eventosBloqueos = (bloqueos || []).map((b) => ({
-        id: `B-${b.id}`,
-        resourceId: String(b.habitacion_numero),
-        title: b.tipo === "mantenimiento" ? "🛠 MANTENIMIENTO" : "🚫 BLOQUEO ADM",
-        start: b.fecha_inicio,
-        end: b.fecha_fin,
-        display: "block",
-        color: b.tipo === "mantenimiento" ? "#f59e0b" : "#111827",
-        extendedProps: {
-          kind: "bloqueo",
-          bloqueo_id: b.id,
-          tipo: b.tipo,
-          motivo: b.motivo || "",
-          habitacion_numero: b.habitacion_numero,
-        },
-      }));
+      const eventosBloqueos = (bloqueos || []).map((b) => {
+  const startISO = buildBloqueoStart(b.fecha_inicio);
+  const endISO = buildBloqueoEnd(b.fecha_fin, startISO);
 
+  return {
+    id: `B-${b.id}`,
+    resourceId: String(b.habitacion_numero),
+    title: b.tipo === "mantenimiento" ? " MANTENIMIENTO" : " BLOQUEO ADM",
+    start: startISO,
+    end: endISO,
+    display: "block",
+    color: b.tipo === "mantenimiento" ? "#f59e0b" : "#111827",
+    extendedProps: {
+      kind: "bloqueo",
+      bloqueo_id: b.id,
+      tipo: b.tipo,
+      motivo: b.motivo || "",
+      habitacion_numero: b.habitacion_numero,
+    },
+  };
+});
       setEvents([...eventosReservas, ...eventosBloqueos]);
     } catch (e) {
       console.error("Error cargando rack:", e);
@@ -236,12 +359,12 @@ export default function CalendarioRack() {
     }
   };
 
-  // ✅ tipos reales (para que el filtro por tipo SI funcione)
+  //  tipos reales (para que el filtro por tipo SI funcione)
   const tiposDisponibles = useMemo(() => {
     return Array.from(new Set((resources || []).map((h) => String(h.tipo)))).sort();
   }, [resources]);
 
-  // ✅ recursos filtrados (Zeus) usando estado_operativo
+  //  recursos filtrados (Zeus) usando estado_operativo
   const resourcesFiltradas = useMemo(() => {
     const q = (fQ || "").trim();
     return (resources || [])
@@ -256,7 +379,7 @@ export default function CalendarioRack() {
         title: `Hab. ${h.numero} — ${h.tipo}`,
         extendedProps: {
           dbId: h.dbId,
-          estado: h.estado_operativo, // ✅ para badge y lógica
+          estado: h.estado_operativo, //  para badge y lógica
           estado_base: h.estado_base,
           tipo: h.tipo,
           numero: h.numero,
@@ -264,7 +387,7 @@ export default function CalendarioRack() {
       }));
   }, [resources, fEstado, fTipo, fQ]);
 
-  // ✅ conteos según estado_operativo (HOY)
+  //  conteos según estado_operativo (HOY)
   const conteos = useMemo(() => {
     const base = resources || [];
     const c = {
@@ -282,11 +405,40 @@ export default function CalendarioRack() {
     return c;
   }, [resources]);
 
-  const nowValue = useMemo(() => {
+ /* const nowValue = useMemo(() => {
     return dayjs(fechaSistema).hour(12).minute(0).second(0).toDate();
-  }, [fechaSistema]);
+  }, [fechaSistema]);*/
 
   const esHoyDelSistema = (yymmdd) => yymmdd === fechaSistema;
+
+  const buildReservaStart = (fechaInicio) =>
+  `${dayjs(fechaInicio).format("YYYY-MM-DD")}T15:00:00`;
+
+const buildReservaEnd = (fechaFin, startISO) => {
+  // checkout 11:00 del día fechaFin
+  let endISO = `${dayjs(fechaFin).format("YYYY-MM-DD")}T11:00:00`;
+
+  //  si por datos viene fechaFin == fechaInicio (o end <= start), lo corregimos:
+  if (!dayjs(endISO).isAfter(dayjs(startISO))) {
+    endISO = `${dayjs(startISO).add(1, "day").format("YYYY-MM-DD")}T11:00:00`;
+  }
+
+  return endISO;
+};
+
+const buildBloqueoStart = (fechaInicio) =>
+  `${dayjs(fechaInicio).format("YYYY-MM-DD")}T00:00:00`;
+
+const buildBloqueoEnd = (fechaFin, startISO) => {
+  // bloqueos normalmente son [inicio, fin) sin hora, lo dejamos a medianoche
+  let endISO = `${dayjs(fechaFin).format("YYYY-MM-DD")}T00:00:00`;
+
+  //  si end == start, al menos 1 día para que se vea
+  if (!dayjs(endISO).isAfter(dayjs(startISO))) {
+    endISO = `${dayjs(startISO).add(1, "day").format("YYYY-MM-DD")}T00:00:00`;
+  }
+  return endISO;
+};
 
   // ========= helpers habitación seleccionada =========
   const findHabByNumero = (numero) => {
@@ -300,7 +452,7 @@ export default function CalendarioRack() {
     const end = dayjs(arg.end).format("YYYY-MM-DD");
     const habNumero = String(arg.resource.id);
 
-    // ✅ BLOQUEAR selección si la habitación está bloqueada HOY (según estado_operativo)
+    //  BLOQUEAR selección si la habitación está bloqueada HOY (según estado_operativo)
     const h = findHabByNumero(habNumero);
     const est = h?.estado_operativo;
 
@@ -391,16 +543,60 @@ export default function CalendarioRack() {
   const abrirEditarReserva = async () => {
     if (!eventoSel || eventoSel.kind !== "reserva") return;
     setEditError("");
+    setEditTabActiva("reserva");
+    setEditTitular(null);
+    setEditHabitaciones([]);
     setEditLoading(true);
 
     try {
+      // 1) Datos de la reserva
       const r = await axios.get(`${API}/api/reservas/${eventoSel.id}`, {
         headers: getAuthHeaders(),
       });
-
       setEditDesde(dayjs(r.data.fecha_inicio).format("YYYY-MM-DD"));
       setEditHasta(dayjs(r.data.fecha_fin).format("YYYY-MM-DD"));
       setEditNotas(r.data.notas || "");
+      setEditHabNumero(String(r.data.habitacion_numero || eventoSel.habitacion || ""));
+
+      // 2) Datos del titular
+      try {
+        const ci = await axios.get(`${API}/api/reservas/${eventoSel.id}/checkin/data`, {
+          headers: getAuthHeaders(),
+        });
+        setEditTitular({
+          huesped_id:       ci.data.huesped_id       || null,
+          tipo_documento:   ci.data.tipo_documento   || "",
+          documento:        ci.data.documento        || "",
+          nombres:          ci.data.nombres          || "",
+          primer_apellido:  ci.data.primer_apellido  || "",
+          segundo_apellido: ci.data.segundo_apellido || "",
+          telefono:         ci.data.telefono         || "",
+          email:            ci.data.email            || "",
+        });
+      } catch {
+        setEditTitular(null);
+      }
+
+      // 3) Habitaciones disponibles (solo si reservada)
+      if (eventoSel.estado === "reservada") {
+        try {
+          const dispR = await axios.get(`${API}/api/reservas/disponibles`, {
+            params: {
+              desde: dayjs(r.data.fecha_inicio).format("YYYY-MM-DD"),
+              hasta: dayjs(r.data.fecha_fin).format("YYYY-MM-DD"),
+            },
+            headers: getAuthHeaders(),
+          });
+          const lista = dispR.data || [];
+          const habActual = String(r.data.habitacion_numero || eventoSel.habitacion || "");
+          if (!lista.some(h => String(h.numero) === habActual)) {
+            lista.unshift({ numero: habActual, tipo: r.data.habitacion_tipo || "" });
+          }
+          setEditHabitaciones(lista);
+        } catch {
+          setEditHabitaciones([{ numero: String(r.data.habitacion_numero || ""), tipo: r.data.habitacion_tipo || "" }]);
+        }
+      }
 
       setShowEditModal(true);
     } catch (e) {
@@ -417,24 +613,66 @@ export default function CalendarioRack() {
 
     if (!editDesde || !editHasta) {
       setEditError("Debe seleccionar desde y hasta.");
+      setEditTabActiva("reserva");
       return;
     }
     if (!dayjs(editHasta).isAfter(dayjs(editDesde))) {
       setEditError("La fecha de salida debe ser posterior a la fecha de ingreso.");
+      setEditTabActiva("reserva");
       return;
+    }
+
+    //  Validar titular antes de llamar al backend
+    if (editTitular?.huesped_id && eventoSel.estado !== "finalizada") {
+      if (!editTitular.nombres?.trim()) {
+        setEditError("El campo 'Nombres' del titular es obligatorio.");
+        setEditTabActiva("huesped");
+        return;
+      }
+      if (!editTitular.primer_apellido?.trim()) {
+        setEditError("El campo 'Primer apellido' del titular es obligatorio.");
+        setEditTabActiva("huesped");
+        return;
+      }
     }
 
     try {
       setEditLoading(true);
+
+      // 1) Actualizar reserva: fechas, habitación, notas
       await axios.put(
         `${API}/api/reservas/${eventoSel.id}`,
         {
-          fecha_inicio: editDesde,
-          fecha_fin: editHasta,
-          notas: editNotas?.trim() || null,
+          fecha_inicio:      editDesde,
+          fecha_fin:         editHasta,
+          notas:             editNotas?.trim() || null,
+          habitacion_numero: editHabNumero || undefined,
         },
         { headers: getAuthHeaders() }
       );
+
+      // 2) Actualizar titular — si tiene ID actualiza huésped existente,
+      //    si no tiene ID pero tiene nombres, crea el huésped y lo vincula
+      if (editTitular && eventoSel.estado !== "finalizada") {
+        const body = {
+          nombres:          editTitular.nombres?.trim()          || "",
+          primer_apellido:  editTitular.primer_apellido?.trim()  || "",
+          segundo_apellido: editTitular.segundo_apellido?.trim() || null,
+          tipo_documento:   editTitular.tipo_documento           || null,
+          documento:        editTitular.documento?.trim()        || null,
+          telefono:         editTitular.telefono?.trim()         || null,
+          email:            editTitular.email?.trim()            || null,
+        };
+
+        if (editTitular.huesped_id) {
+          // Huésped ya existe → actualizar
+          await axios.put(
+            `${API}/api/huespedes/${editTitular.huesped_id}`,
+            body,
+            { headers: getAuthHeaders() }
+          );
+        }
+      }
 
       setShowEditModal(false);
       setShowEventModal(false);
@@ -442,13 +680,18 @@ export default function CalendarioRack() {
       await cargarRack();
     } catch (e) {
       const status = e?.response?.status;
-      const msg = e?.response?.data?.message;
+      const msg    = e?.response?.data?.message;
 
       if (status === 409) {
+        setEditTabActiva("reserva");
         setEditError(msg || "Choque de fechas: la habitación ya tiene una reserva en ese rango.");
         return;
       }
-      setEditError(msg || "No se pudo actualizar la reserva.");
+      // Si el error viene del PUT de huésped, llevar al tab correcto
+      if (status === 400) {
+        setEditTabActiva("huesped");
+      }
+      setEditError(msg || "No se pudo actualizar. Verifica los datos e intenta de nuevo.");
     } finally {
       setEditLoading(false);
     }
@@ -496,7 +739,7 @@ export default function CalendarioRack() {
     navigate(`/checkin/${eventoSel.id}`);
   };
 
-  // ✅ Usamos hacerCheckout para que no salga no-unused-vars
+  //  Usamos hacerCheckout para que no salga no-unused-vars
   const hacerCheckout = () => {
     if (!eventoSel || eventoSel.kind !== "reserva") return;
     navigate(`/reservas/${eventoSel.id}`);
@@ -507,7 +750,7 @@ export default function CalendarioRack() {
     if (eventoSel.kind === "reserva") navigate(`/reservas/${eventoSel.id}`);
   };
 
- /* // ✅ FIX: define irAuditoriaCargos (antes no existía)
+ /* //  FIX: define irAuditoriaCargos (antes no existía)
   const irAuditoriaCargos = () => {
     if (!eventoSel || eventoSel.kind !== "reserva") return;
     navigate(`/reservas/${eventoSel.id}/auditoria`);
@@ -529,7 +772,7 @@ export default function CalendarioRack() {
   };
 
   // ==========================
-  // ✅ Cambiar estado habitación (manual)
+  //  Cambiar estado habitación (manual)
   // ==========================
   const abrirModalEstado = (resource) => {
     const ep = resource?.extendedProps || {};
@@ -570,6 +813,85 @@ export default function CalendarioRack() {
     }
   };
 
+  // ── Extender estadía ─────────────────────────────────────────────────────
+  const abrirExtenderRack = () => {
+    if (!eventoSel) return;
+    setExtenderFechaFin(dayjs(eventoSel.end).format("YYYY-MM-DD"));
+    setExtenderError("");
+    setShowEventModal(false);
+    setShowExtenderModal(true);
+  };
+
+  const confirmarExtenderRack = async () => {
+    if (!extenderFechaFin || !eventoSel) return;
+    setExtendiendo(true); setExtenderError("");
+    try {
+      await axios.post(
+        `${API}/api/reservas/${eventoSel.id}/extender`,
+        { nueva_fecha_fin: extenderFechaFin, usuario: "recepcion" },
+        { headers: getAuthHeaders() }
+      );
+      setShowExtenderModal(false);
+      await cargarRack();
+    } catch (e) {
+      setExtenderError(e?.response?.data?.message || "No se pudo extender la estadía.");
+    } finally {
+      setExtendiendo(false);
+    }
+  };
+
+  // ── No-show ───────────────────────────────────────────────────────────────
+  const abrirNoShowRack = () => {
+    if (!eventoSel) return;
+    setNoShowError("");
+    setShowEventModal(false);
+    setShowNoShowModal(true);
+  };
+
+  const confirmarNoShow = async () => {
+    if (!eventoSel) return;
+    setNoShowCargando(true); setNoShowError("");
+    try {
+      await axios.post(
+        `${API}/api/reservas/${eventoSel.id}/no-show`,
+        {},
+        { headers: getAuthHeaders() }
+      );
+      setShowNoShowModal(false);
+      await cargarRack();
+    } catch (e) {
+      setNoShowError(e?.response?.data?.message || "No se pudo marcar como no-show.");
+    } finally {
+      setNoShowCargando(false);
+    }
+  };
+
+  // ── PDF registro hotelero ─────────────────────────────────────────────────
+  const descargarRegistroRack = async () => {
+    if (!eventoSel) return;
+    setGenerandoPdfRack(true);
+    try {
+      const response = await axios.get(
+        `${API}/api/reservas/${eventoSel.id}/registro-hotelero`,
+        { headers: getAuthHeaders(), responseType: "blob" }
+      );
+      const url  = window.URL.createObjectURL(
+        new Blob([response.data], { type: "application/pdf" })
+      );
+      const link = document.createElement("a");
+      link.href  = url;
+      link.setAttribute("download", `registro_hotelero_reserva_${eventoSel.id}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      alert("No se pudo generar el registro hotelero.");
+    } finally {
+      setGenerandoPdfRack(false);
+    }
+  };
+
   return (
     <div style={{ padding: 10 }}>
       <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
@@ -582,13 +904,13 @@ export default function CalendarioRack() {
 
         <div className="d-flex align-items-center gap-2 flex-wrap">
           <span className="badge bg-secondary">Fecha operativa del hotel: {fechaSistema}</span>
-          <Button variant="outline-secondary" size="sm" onClick={cargarRack}>
+          <Button variant="outline-secondary" size="sm" onClick={cargarRackSeguro}>
             ↻ Refrescar
           </Button>
         </div>
       </div>
 
-      {/* ✅ mini dashboard conteos (HOY) */}
+      {/*  mini dashboard conteos (HOY) */}
       <div className="d-flex gap-2 flex-wrap mb-2">
         <Badge bg="dark">Total: {conteos.total}</Badge>
         <Badge bg="success">Disponibles: {conteos.disponible}</Badge>
@@ -600,7 +922,7 @@ export default function CalendarioRack() {
         <Badge bg="secondary">Fuera servicio: {conteos.fuera_servicio}</Badge>
       </div>
 
-      {/* ✅ filtros tipo Zeus */}
+      {/*  filtros tipo Zeus */}
       <div className="card shadow-sm mb-2">
         <div className="card-body py-2">
           <div className="row g-2 align-items-end">
@@ -639,7 +961,7 @@ export default function CalendarioRack() {
                 className="w-100"
                 onClick={() => {
                   // filtros ya son reactivos; esto solo refresca data
-                  cargarRack();
+                  cargarRackSeguro();
                 }}
               >
                 Aplicar
@@ -654,14 +976,22 @@ export default function CalendarioRack() {
         </div>
       </div>
 
+      {loadingFecha || !fechaSistema ? (
+        <div className="card shadow-sm p-4">
+          <div className="text-muted">Cargando fecha </div>
+          </div>
+      ) : (
+
       <FullCalendar
+        key = {fechaSistema}
         plugins={[resourceTimelinePlugin, interactionPlugin]}
         schedulerLicenseKey="GPL-My-Project-Is-Open-Source"
         locale="es"
         initialView="resourceTimelineWeek"
         initialDate={fechaSistema}
+        ref={calendarRef}
         nowIndicator={true}
-        now={() => nowValue}
+        now={() => dayjs(fechaSistema).hour(12).minute(0).second(0).toDate()}
         height="78vh"
         resourceAreaWidth="300px"
         resources={resourcesFiltradas}
@@ -671,17 +1001,31 @@ export default function CalendarioRack() {
         select={handleSelect}
         eventClick={handleEventClick}
         unselectAuto={true}
-        slotDuration="24:00:00"
-        slotLabelFormat={[{ weekday: "short", month: "numeric", day: "numeric" }]}
+        slotDuration="12:00:00"
+        slotLabelFormat={[{ weekday: "short", month: "numeric", day: "numeric" },
+          {hour: "2-digit"},
+        ]}
+        slotLabelContent={(arg)=>{
+          if (arg.level===0) return arg.text;
+        }}
         headerToolbar={{
-          left: "today prev next",
+          left: "HoySistema prev next",
           center: "title",
           right: "resourceTimelineDay,resourceTimelineWeek,resourceTimelineMonth",
         }}
+        customButtons={{
+          hoySistema:{
+            text: "Hoy",
+            click: () => {
+              const api = calendarRef.current?.getApi?.();
+              if (api) api.gotoDate(fechaSistema);
+            }
+          }
+        }}
         views={{
-          resourceTimelineDay: { slotDuration: "24:00:00" },
-          resourceTimelineWeek: { slotDuration: "24:00:00" },
-          resourceTimelineMonth: { slotDuration: { days: 1 } },
+          resourceTimelineDay: { slotDuration: "12:00:00" },
+          resourceTimelineWeek: { slotDuration: "12:00:00" },
+          resourceTimelineMonth: { slotDuration:"12:00:00" }, //{ days: 1 } 
         }}
         resourceLabelContent={(arg) => {
           const ep = arg.resource.extendedProps || {};
@@ -721,7 +1065,7 @@ export default function CalendarioRack() {
         eventContent={(info) => (
           <div style={{ fontSize: 12, padding: 2, fontWeight: 600 }}>{info.event.title}</div>
         )}
-      />
+      />)}
 
       {/* Modal creación desde rango */}
       <Modal show={showSlotModal} onHide={handleCloseSlotModal} centered>
@@ -793,38 +1137,211 @@ export default function CalendarioRack() {
       </Modal>
 
       {/* Modal editar reserva */}
-      <Modal show={showEditModal} onHide={() => setShowEditModal(false)} centered>
+      <Modal show={showEditModal} onHide={() => setShowEditModal(false)} centered size="lg">
         <Modal.Header closeButton>
-          <Modal.Title>Editar reserva #{eventoSel?.id}</Modal.Title>
+          <Modal.Title>
+            Editar reserva #{eventoSel?.id}{" "}
+            <Badge bg={eventoSel?.estado === "ocupada" ? "success" : "primary"} className="ms-2" style={{ fontSize: 13 }}>
+              {eventoSel?.estado}
+            </Badge>
+          </Modal.Title>
         </Modal.Header>
 
         <Modal.Body>
-          <p className="mb-2">
-            <strong>Habitación:</strong> {eventoSel?.habitacion}
-          </p>
+          {editLoading && !editDesde ? (
+            <div className="d-flex justify-content-center py-4">
+              <Spinner animation="border" />
+            </div>
+          ) : (
+            <>
+              {/* Pestañas */}
+              <Nav variant="tabs" className="mb-3" activeKey={editTabActiva} onSelect={k => setEditTabActiva(k)}>
+                <Nav.Item>
+                  <Nav.Link eventKey="reserva">📅 Reserva</Nav.Link>
+                </Nav.Item>
+                <Nav.Item>
+                  <Nav.Link eventKey="huesped">👤 Titular</Nav.Link>
+                </Nav.Item>
+              </Nav>
 
-          <Form.Group className="mb-2">
-            <Form.Label>Ingreso</Form.Label>
-            <Form.Control type="date" value={editDesde} onChange={(e) => setEditDesde(e.target.value)} />
-          </Form.Group>
+              {/* ── Tab: Reserva ── */}
+              {editTabActiva === "reserva" && (
+                <div>
+                  {eventoSel?.estado === "ocupada" && (
+                    <div className="alert alert-info py-2 mb-3" style={{ fontSize: 13 }}>
+                      La reserva está <b>ocupada</b>. Solo se pueden editar las notas internas.
+                    </div>
+                  )}
 
-          <Form.Group className="mb-2">
-            <Form.Label>Salida</Form.Label>
-            <Form.Control type="date" value={editHasta} onChange={(e) => setEditHasta(e.target.value)} />
-          </Form.Group>
+                  <Row className="mb-3">
+                    <Col md={6}>
+                      <Form.Group>
+                        <Form.Label>Ingreso</Form.Label>
+                        <Form.Control
+                          type="date"
+                          value={editDesde}
+                          disabled={eventoSel?.estado === "ocupada"}
+                          onChange={(e) => setEditDesde(e.target.value)}
+                        />
+                      </Form.Group>
+                    </Col>
+                    <Col md={6}>
+                      <Form.Group>
+                        <Form.Label>Salida</Form.Label>
+                        <Form.Control
+                          type="date"
+                          value={editHasta}
+                          disabled={eventoSel?.estado === "ocupada"}
+                          onChange={(e) => setEditHasta(e.target.value)}
+                        />
+                      </Form.Group>
+                    </Col>
+                  </Row>
 
-          <Form.Group className="mb-2">
-            <Form.Label>Notas internas</Form.Label>
-            <Form.Control
-              as="textarea"
-              rows={3}
-              value={editNotas}
-              onChange={(e) => setEditNotas(e.target.value)}
-              placeholder="Ej: Llegará tarde, requiere cama adicional, etc."
-            />
-          </Form.Group>
+                  {/* Cambio de habitación — solo reservadas */}
+                  {eventoSel?.estado === "reservada" && editHabitaciones.length > 1 && (
+                    <Form.Group className="mb-3">
+                      <Form.Label>Habitación</Form.Label>
+                      <Form.Select
+                        value={editHabNumero}
+                        onChange={(e) => setEditHabNumero(e.target.value)}
+                      >
+                        {editHabitaciones.map(h => (
+                          <option key={h.numero} value={String(h.numero)}>
+                            Hab. {h.numero} — {h.tipo}
+                            {String(h.numero) === String(eventoSel?.habitacion) ? " (actual)" : ""}
+                          </option>
+                        ))}
+                      </Form.Select>
+                      <Form.Text className="text-muted">
+                        Habitación actual + disponibles para este rango de fechas.
+                      </Form.Text>
+                    </Form.Group>
+                  )}
 
-          {editError && <div className="alert alert-danger py-2 mt-2 mb-0">{editError}</div>}
+                  <Form.Group>
+                    <Form.Label>
+                      Notas internas{" "}
+                      <small className="text-muted">(solo visibles para el personal)</small>
+                    </Form.Label>
+                    <Form.Control
+                      as="textarea"
+                      rows={3}
+                      value={editNotas}
+                      onChange={(e) => setEditNotas(e.target.value)}
+                      placeholder="Ej: Llegará tarde, requiere cama adicional, alergias..."
+                    />
+                  </Form.Group>
+                </div>
+              )}
+
+              {/* ── Tab: Titular ── */}
+              {editTabActiva === "huesped" && (
+                <div>
+                  {!editTitular ? (
+                    <div className="text-muted py-2">No se encontraron datos del titular.</div>
+                  ) : (
+                    <>
+                      {!editTitular.huesped_id && (
+                        <div className="alert alert-info py-2 mb-3" style={{ fontSize: 13 }}>
+                          El titular aún no tiene documento registrado. Los datos se confirmarán en el Check-In.
+                        </div>
+                      )}
+
+                      <Row className="g-2">
+                        <Col md={3}>
+                          <Form.Label>Tipo documento</Form.Label>
+                          <Form.Select
+                            value={editTitular.tipo_documento}
+                            onChange={e => setEditTitular(prev => ({ ...prev, tipo_documento: e.target.value }))}
+                          >
+                            <option value="">Seleccione...</option>
+                            {["CC","CE","PA","TI","NIT"].map(t => <option key={t} value={t}>{t}</option>)}
+                          </Form.Select>
+                        </Col>
+                        <Col md={6}>
+                          <Form.Label>Documento</Form.Label>
+                          <Form.Control
+                            value={editTitular.documento}
+                            onChange={e => setEditTitular(prev => ({ ...prev, documento: e.target.value }))}
+                            onKeyDown={e => e.key === "Enter" && buscarHuespedParaEditar()}
+                            placeholder="Documento y Enter para buscar..."
+                          />
+                        </Col>
+                        <Col md={3} className="d-flex align-items-end">
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            className="w-100"
+                            onClick={buscarHuespedParaEditar}
+                            disabled={editBuscando || !editTitular.tipo_documento || !editTitular.documento}
+                          >
+                            {editBuscando ? <Spinner animation="border" size="sm" /> : "🔍 Buscar"}
+                          </Button>
+                        </Col>
+                        {editTitular.huesped_id && (
+                          <Col md={12}>
+                            <small className="text-success"> Huésped encontrado — datos cargados.</small>
+                          </Col>
+                        )}
+
+                        <Col md={4}>
+                          <Form.Label>Nombres *</Form.Label>
+                          <Form.Control
+                            value={editTitular.nombres}
+                            onChange={e => setEditTitular(prev => ({ ...prev, nombres: e.target.value }))}
+                          />
+                        </Col>
+                        <Col md={4}>
+                          <Form.Label>Primer apellido *</Form.Label>
+                          <Form.Control
+                            value={editTitular.primer_apellido}
+                            onChange={e => setEditTitular(prev => ({ ...prev, primer_apellido: e.target.value }))}
+                          />
+                        </Col>
+                        <Col md={4}>
+                          <Form.Label>Segundo apellido</Form.Label>
+                          <Form.Control
+                            value={editTitular.segundo_apellido}
+                            onChange={e => setEditTitular(prev => ({ ...prev, segundo_apellido: e.target.value }))}
+                          />
+                        </Col>
+
+                        <Col md={6}>
+                          <Form.Label>Teléfono</Form.Label>
+                          <Form.Control
+                            value={editTitular.telefono}
+                            onChange={e => setEditTitular(prev => ({ ...prev, telefono: e.target.value }))}
+                            placeholder="Ej: 3001234567"
+                          />
+                        </Col>
+                        <Col md={6}>
+                          <Form.Label>Email</Form.Label>
+                          <Form.Control
+                            value={editTitular.email}
+                            onChange={e => setEditTitular(prev => ({ ...prev, email: e.target.value }))}
+                            placeholder="correo@..."
+                          />
+                        </Col>
+                      </Row>
+
+                      <div className="text-muted mt-2" style={{ fontSize: 12 }}>
+                        Nombre completo:{" "}
+                        <b>
+                          {[editTitular.nombres, editTitular.primer_apellido, editTitular.segundo_apellido]
+                            .map(x => (x || "").trim()).filter(Boolean).join(" ") || "—"}
+                        </b>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {editError && (
+                <div className="alert alert-danger py-2 mt-3 mb-0">{editError}</div>
+              )}
+            </>
+          )}
         </Modal.Body>
 
         <Modal.Footer>
@@ -832,7 +1349,7 @@ export default function CalendarioRack() {
             Cancelar
           </Button>
           <Button variant="warning" onClick={guardarEdicionReserva} disabled={editLoading}>
-            {editLoading ? "Guardando..." : "Guardar cambios"}
+            {editLoading ? <><Spinner animation="border" size="sm" className="me-2" />Guardando...</> : "Guardar cambios"}
           </Button>
         </Modal.Footer>
       </Modal>
@@ -906,7 +1423,7 @@ export default function CalendarioRack() {
                    </Button>
                 )}
 
-                {/* ✅ usamos hacerCheckout para que no salga el warning */}
+                {/*  usamos hacerCheckout para que no salga el warning */}
                 {eventoSel?.estado === "ocupada" && (
                   <Button variant="outline-success" size="sm" disabled={!puedeCheckout} onClick={hacerCheckout}>
                     Ir a check-out / facturar
@@ -916,6 +1433,32 @@ export default function CalendarioRack() {
                 <Button variant="outline-danger" size="sm" onClick={cancelarReserva} disabled={!puedeCancelar}>
                   Cancelar reserva
                 </Button>
+
+                {/*  No-show: solo si está reservada y es hoy o pasada */}
+                {eventoSel?.estado === "reservada" && (
+                  <Button variant="outline-secondary" size="sm" onClick={abrirNoShowRack}>
+                    🚫 Marcar no-show
+                  </Button>
+                )}
+
+                {/*  Extender estadía: solo si está ocupada */}
+                {eventoSel?.estado === "ocupada" && (
+                  <Button variant="outline-success" size="sm" onClick={abrirExtenderRack}>
+                    📅+ Extender estadía
+                  </Button>
+                )}
+
+                {/*  Registro hotelero PDF: solo si está ocupada */}
+                {eventoSel?.estado === "ocupada" && (
+                  <Button
+                    variant="outline-dark"
+                    size="sm"
+                    onClick={descargarRegistroRack}
+                    disabled={generandoPdfRack}
+                  >
+                    {generandoPdfRack ? "Generando PDF..." : "🖨️ Registro hotelero"}
+                  </Button>
+                )}
               </div>
 
               {eventoSel?.estado === "reservada" && !puedeCheckIn && (
@@ -940,7 +1483,77 @@ export default function CalendarioRack() {
         </Modal.Footer>
       </Modal>
 
-      {/* ✅ Modal cambiar estado habitación */}
+      {/* ══ MODAL EXTENDER ESTADÍA (RACK) ════════════════════════════════ */}
+      <Modal show={showExtenderModal} onHide={() => setShowExtenderModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>📅 Extender estadía — Reserva #{eventoSel?.id}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div className="mb-3" style={{ fontSize: 14 }}>
+            <div><b>Habitación:</b> {eventoSel?.habitacion}</div>
+            <div><b>Salida actual:</b> {eventoSel?.end}</div>
+          </div>
+          <div className="mb-2">
+            <Form.Label>Nueva fecha de salida</Form.Label>
+            <Form.Control
+              type="date"
+              value={extenderFechaFin}
+              min={dayjs(eventoSel?.end).add(1, "day").format("YYYY-MM-DD")}
+              onChange={e => setExtenderFechaFin(e.target.value)}
+            />
+            <div className="form-text text-muted">
+              Debe ser posterior a la salida actual. Se generará un cargo adicional automáticamente.
+            </div>
+          </div>
+          {extenderError && (
+            <div className="alert alert-danger py-2 mt-2 mb-0" style={{ fontSize: 13 }}>
+              {extenderError}
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => setShowExtenderModal(false)} disabled={extendiendo}>
+            Cancelar
+          </Button>
+          <Button variant="success" onClick={confirmarExtenderRack} disabled={extendiendo || !extenderFechaFin}>
+            {extendiendo
+              ? <><Spinner animation="border" size="sm" className="me-2" />Extendiendo...</>
+              : "Confirmar extensión"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ══ MODAL NO-SHOW (RACK) ════════════════════════════════════════════ */}
+      <Modal show={showNoShowModal} onHide={() => setShowNoShowModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>🚫 Marcar no-show — Reserva #{eventoSel?.id}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p>
+            ¿Confirmar que el huésped <b>{eventoSel?.titulo}</b> no se presentó?
+          </p>
+          <p className="text-muted" style={{ fontSize: 13 }}>
+            La reserva quedará en estado <b>no-show</b> y la habitación volverá a estar disponible.
+          </p>
+          {noShowError && (
+            <div className="alert alert-danger py-2 mb-0" style={{ fontSize: 13 }}>
+              {noShowError}
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => setShowNoShowModal(false)} disabled={noShowCargando}>
+            Cancelar
+          </Button>
+          <Button variant="danger" onClick={confirmarNoShow} disabled={noShowCargando}>
+            {noShowCargando
+              ? <><Spinner animation="border" size="sm" className="me-2" />Procesando...</>
+              : "Confirmar no-show"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/*  Modal cambiar estado habitación */}
       <Modal show={showEstadoModal} onHide={() => setShowEstadoModal(false)} centered>
         <Modal.Header closeButton>
           <Modal.Title>Cambiar estado de habitación</Modal.Title>

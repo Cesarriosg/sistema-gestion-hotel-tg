@@ -2,9 +2,9 @@ import { pool } from "../config/database.js";
 import dayjs from "dayjs";
 import axios from "axios";
 
-// ===============================
+
 // Helpers
-// ===============================
+
 const getOtaConfig = async (client, ota_canal) => {
   const r = await client.query(
     `SELECT ota_canal, activa, habitaciones_incluidas, planes_incluidos
@@ -31,9 +31,9 @@ const jsonArrayIncludes = (arrJson, value) => {
   return arr.map(String).includes(String(value));
 };
 
-// ===============================
+
 // 1) WEBHOOK SANDBOX UPSERT
-// ===============================
+
 export const otaCrearOActualizarReservaSandbox = async (req, res) => {
   const {
     ota_canal = "sandbox",
@@ -66,7 +66,7 @@ export const otaCrearOActualizarReservaSandbox = async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    // ✅ 0) Config OTA: activa/pausada + filtros
+    //  0) Config OTA: activa/pausada + filtros
     const cfg = await getOtaConfig(client, ota_canal);
 
     if (!cfg.activa) {
@@ -77,7 +77,7 @@ export const otaCrearOActualizarReservaSandbox = async (req, res) => {
       });
     }
 
-    // ✅ Filtrar habitaciones/planes si config los define
+    //  Filtrar habitaciones/planes si config los define
     if (!jsonArrayIncludes(cfg.habitaciones_incluidas, habitacion_numero)) {
       await client.query("ROLLBACK");
       return res.status(200).json({
@@ -132,7 +132,7 @@ export const otaCrearOActualizarReservaSandbox = async (req, res) => {
       return res.status(409).json({ message: "Choque: la habitación ya tiene una reserva en ese rango." });
     }
 
-    // 3) huésped opcional (en TG: puede ser null)
+    // 3) huésped opcional 
     const huespedId = null;
 
     const otaPayload = payload || {
@@ -185,9 +185,9 @@ export const otaCrearOActualizarReservaSandbox = async (req, res) => {
   }
 };
 
-// ===============================
+
 // 2) CANCELAR OTA (idempotente)
-// ===============================
+
 export const otaCancelarReservaSandbox = async (req, res) => {
   const { ota_canal = "sandbox", ota_reserva_id, motivo = "Cancelación OTA" } = req.body || {};
 
@@ -251,9 +251,9 @@ export const otaCancelarReservaSandbox = async (req, res) => {
   }
 };
 
-// ===============================
+
 // 3) GET config OTA
-// ===============================
+
 export const otaGetConfig = async (req, res) => {
   const { ota_canal } = req.params;
   if (!ota_canal) return res.status(400).json({ message: "ota_canal requerido." });
@@ -270,10 +270,10 @@ export const otaGetConfig = async (req, res) => {
   }
 };
 
-// ===============================
+
 // 4) PUT config OTA (activar/pausar + filtros)
 // body: { activa, habitaciones_incluidas, planes_incluidos }
-// ===============================
+
 export const otaUpsertConfig = async (req, res) => {
   const { ota_canal } = req.params;
   const {
@@ -312,10 +312,10 @@ export const otaUpsertConfig = async (req, res) => {
   }
 };
 
-// ===============================
+
 // 5) Stats por OTA
 // GET /api/otas/stats/reservas?desde&hasta
-// ===============================
+
 export const otaStatsReservas = async (req, res) => {
   const { desde, hasta } = req.query;
 
@@ -367,7 +367,7 @@ const buscarHabitacionDisponible = async (client, { tipoHabitacion, desde, hasta
 
 
 export const channexWebhook = async (req, res) => {
-  // ✅ responde inmediatamente (evita reintentos y headers_sent)
+  //  responde inmediatamente (evita reintentos y headers_sent)
   res.sendStatus(200);
 
   try {
@@ -387,7 +387,7 @@ export const channexWebhook = async (req, res) => {
       return;
     }
 
-    // ============ FALLBACK: guardar con payload (aunque Channex API falle) ============
+    //  FALLBACK: guardar con payload (aunque Channex API falle) 
     const fecha_inicio = dayjs(p.arrival_date).format("YYYY-MM-DD");
     const noches = Number(p.count_of_nights || 1);
     const fecha_fin = dayjs(fecha_inicio).add(noches, "day").format("YYYY-MM-DD");
@@ -475,7 +475,7 @@ export const channexWebhook = async (req, res) => {
       );
 
       await client.query("COMMIT");
-      console.log("✅ Reserva OTA guardada (fallback) -> Hab:", hab.numero);
+      console.log(" Reserva OTA guardada (fallback) -> Hab:", hab.numero);
     } catch (e) {
       await client.query("ROLLBACK");
       console.error("❌ Error guardando reserva OTA:", e.message);

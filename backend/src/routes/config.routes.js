@@ -4,7 +4,7 @@ import { pool } from "../config/database.js";
 
 const router = express.Router();
 
-// ✅ Obtener fecha del sistema (fecha operativa del hotel)
+//  Obtener fecha del sistema (fecha operativa del hotel)
 router.get("/fecha-sistema", async (req, res) => {
   try {
     const result = await pool.query("SELECT fecha_sistema FROM configuracion LIMIT 1");
@@ -15,7 +15,7 @@ router.get("/fecha-sistema", async (req, res) => {
   }
 });
 
-// ✅ Actualizar manualmente la fecha del sistema (para cierre de día)
+//  Actualizar manualmente la fecha del sistema (para cierre de día)
 router.put("/fecha-sistema", async (req, res) => {
   try {
     const { nueva_fecha } = req.body;

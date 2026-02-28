@@ -1,4 +1,3 @@
-// NuevoWalkIn.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -39,19 +38,19 @@ export default function NuevoWalkIn() {
   const [desde] = useState(q.get("desde") || "");
   const [hasta] = useState(q.get("hasta") || "");
 
-  // ✅ Zeus: plan predeterminado + selector
+  //   plan predeterminado + selector
   const [plan, setPlan] = useState("C1");
 
-  // ✅ tipo habitación se carga automático por número
+  //   tipo habitación se carga automático por número
   const [tipoHabitacion, setTipoHabitacion] = useState("");
   const [tipoErr, setTipoErr] = useState("");
 
-  // ✅ tarifa automática
+  //   tarifa automática
   const [cargandoTarifa, setCargandoTarifa] = useState(false);
   const [tarifaErr, setTarifaErr] = useState("");
   const [tarifa, setTarifa] = useState(null); // {noches, precio_noche, total}
 
-  // ✅ titular
+  //   titular
   const [tipoDocumento, setTipoDocumento] = useState("");
   const [documento, setDocumento] = useState("");
   const [telefono, setTelefono] = useState("");
@@ -66,7 +65,7 @@ export default function NuevoWalkIn() {
   const [ciudad, setCiudad] = useState("");
   const [nacionalidad, setNacionalidad] = useState("");
 
-  // ✅ NUEVO: acompañantes
+  //    acompañantes
   const [acompanantes, setAcompanantes] = useState([]);
 
   const addAcompanante = () => {
@@ -92,7 +91,7 @@ export default function NuevoWalkIn() {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
-  // ✅ Zeus autofill
+  //    autofill
   const [autocompletando, setAutocompletando] = useState(false);
   const [autofillMsg, setAutofillMsg] = useState("");
   const [huespedEncontrado, setHuespedEncontrado] = useState(null);
@@ -176,7 +175,7 @@ export default function NuevoWalkIn() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tipoHabitacion, plan, desde, hasta]);
 
-  // 3) ✅ Autocompletar Zeus por documento (debounce)
+  // 3)   Autocompletar Zeus por documento (debounce)
   useEffect(() => {
     setAutofillMsg("");
     setHuespedEncontrado(null);
@@ -246,7 +245,7 @@ export default function NuevoWalkIn() {
       return;
     }
 
-    // ✅ validar acompañantes: si hay documento, debe haber tipo (y viceversa)
+    //   validar acompañantes: si hay documento, debe haber tipo (y viceversa)
     for (const a of acompanantes) {
       const td = (a.tipo_documento || "").trim();
       const doc = (a.documento || "").trim();
@@ -280,7 +279,7 @@ export default function NuevoWalkIn() {
           fecha_inicio: desde,
           fecha_fin: hasta,
 
-          // ✅ datos huésped titular
+          //   datos huésped titular
           tipo_documento: tipoDocumento,
           huesped_documento: documento.trim(),
           huesped_telefono: telefono.trim() || null,
@@ -303,7 +302,7 @@ export default function NuevoWalkIn() {
           plan,
           tarifa_snapshot,
 
-          // ✅ NUEVO: acompañantes
+          //  acompañantes
           acompanantes,
         },
         { headers: getAuthHeaders() }
@@ -510,7 +509,7 @@ export default function NuevoWalkIn() {
                     </div>
                   </div>
 
-                  {/* ✅ NUEVO: Acompañantes */}
+                  {/*   NUEVO: Acompañantes */}
                   <hr className="my-4" />
                   <div className="d-flex align-items-center justify-content-between">
                     <div className="fw-semibold">Acompañantes</div>

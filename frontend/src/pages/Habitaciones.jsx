@@ -1,8 +1,8 @@
-// src/pages/Habitaciones.jsx
+
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Form, Button, Badge, Modal } from "react-bootstrap";
-import { useAuth } from "../context/AuthContext"; // ✅ ajusta si tu ruta es diferente
+import { useAuth } from "../context/AuthContext";
 
 const API = "http://localhost:4000";
 
@@ -27,14 +27,14 @@ export default function Habitaciones() {
   const [loading, setLoading] = useState(false);
   const [loadingTipos, setLoadingTipos] = useState(false);
 
-  // ✅ Modal crear habitación (solo admin)
+  //  Modal crear habitación (solo admin)
   const [showCrear, setShowCrear] = useState(false);
   const [nuevoNumero, setNuevoNumero] = useState("");
   const [nuevoTipo, setNuevoTipo] = useState("");
   const [nuevaCapacidad, setNuevaCapacidad] = useState(2);
   const [guardando, setGuardando] = useState(false);
 
-  // ✅ Guarda por fila: plan + tarifa + loading
+  // Guarda por fila: plan + tarifa + loading
   const [edits, setEdits] = useState({}); // { [id]: { plan, tarifa, saving } }
 
   const cargarHabitaciones = async () => {
@@ -93,12 +93,8 @@ export default function Habitaciones() {
 
   useEffect(() => {
     refrescar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ✅ Cambiar estado (TU ENDPOINT ESTÁ COMENTADO EN BACKEND)
-  // Por eso en tu caso debes usar el endpoint que sí tengas activo.
-  // Si ya reactivaste router.put("/:id/estado") en backend, esto funciona.
+  
+  }, []); // eslint-disable-line
   const cambiarEstado = async (id, nuevoEstado) => {
     try {
       await axios.put(
@@ -170,7 +166,7 @@ export default function Habitaciones() {
     }
   };
 
-  // ✅ guardar plan+tarifa por habitación (HU-PS3 simplificada)
+  // guardar plan+tarifa por habitación 
   const guardarPlanTarifa = async (habId) => {
     const row = edits[habId] || {};
     const plan = String(row.plan || "").trim();
@@ -247,7 +243,7 @@ export default function Habitaciones() {
             ↻ Recargar
           </Button>
 
-          {/* ✅ solo admin puede crear habitación */}
+          {/*  solo admin puede crear habitación */}
           <Button
             variant="primary"
             onClick={() => setShowCrear(true)}
@@ -301,7 +297,7 @@ export default function Habitaciones() {
               <th>Estado</th>
               <th>Activa</th>
 
-              {/* ✅ HU-PS3 simplificada */}
+              {/*  HU-PS3 simplificada */}
               <th style={{ minWidth: 130 }}>Plan</th>
               <th style={{ minWidth: 140 }}>Tarifa</th>
               <th style={{ minWidth: 110 }}>Guardar</th>
@@ -358,7 +354,7 @@ export default function Habitaciones() {
                         <Badge bg={activa ? "success" : "secondary"}>{activa ? "Sí" : "No"}</Badge>
                       </td>
 
-                      {/* ✅ Plan */}
+                      {/*  Plan */}
                       <td>
                         <Form.Control
                           size="sm"
@@ -374,7 +370,7 @@ export default function Habitaciones() {
                         />
                       </td>
 
-                      {/* ✅ Tarifa */}
+                      {/*  Tarifa */}
                       <td>
                         <Form.Control
                           size="sm"
@@ -391,7 +387,7 @@ export default function Habitaciones() {
                         />
                       </td>
 
-                      {/* ✅ Guardar Plan+Tarifa */}
+                      {/*  Guardar Plan+Tarifa */}
                       <td>
                         <Button
                           size="sm"
@@ -403,7 +399,7 @@ export default function Habitaciones() {
                         </Button>
                       </td>
 
-                      {/* ✅ Acciones rápidas */}
+                      {/*  Acciones rápidas */}
                       <td className="d-flex gap-2 flex-wrap">
                         <Button
                           size="sm"
@@ -474,7 +470,7 @@ export default function Habitaciones() {
         </table>
       </div>
 
-      {/* ✅ Modal crear habitación (solo admin) */}
+      {/*  Modal crear habitación (solo admin) */}
       <Modal show={showCrear} onHide={() => setShowCrear(false)} centered>
         <Modal.Header closeButton>
           <Modal.Title>Crear habitación</Modal.Title>

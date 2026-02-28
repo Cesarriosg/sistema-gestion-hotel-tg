@@ -17,9 +17,7 @@ const TIPOS_DOC = [
   { value: "NIT", label: "NIT" },
 ];
 
-// props:
-//  - value: objeto huesped (estado en el padre)
-//  - onChange: setHuesped({...})
+
 export default function HuespedLookup({ value, onChange }) {
   const [estado, setEstado] = useState("idle"); // idle | typing | loading | found | not_found | error
   const [msg, setMsg] = useState("");
@@ -52,7 +50,6 @@ export default function HuespedLookup({ value, onChange }) {
   };
 
   const aplicarEncontrado = (h) => {
-    // Preferimos estructura nueva (nombres/apellidos) y mantenemos "nombre" por compatibilidad
     const nombreCompleto =
       [h.nombres, h.primer_apellido, h.segundo_apellido].filter(Boolean).join(" ").trim() ||
       (h.nombre || "").trim();
@@ -126,7 +123,6 @@ export default function HuespedLookup({ value, onChange }) {
     }, 350);
 
     return () => clearTimeout(timerRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
   const badge = () => {

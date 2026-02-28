@@ -38,7 +38,7 @@ export default function Rack() {
         {habitaciones.map((hab) => (
           <div
             key={hab.id}
-            className={`rack-item ${hab.estado_real}`} // 👈 usamos el estado dinámico
+            className={`rack-item ${hab.estado_real}`} 
             onClick={() => abrirModal(hab)}
           >
             <strong>Hab. {hab.numero}</strong>
@@ -53,7 +53,7 @@ export default function Rack() {
           isOpen={modalOpen}
           closeModal={cerrarModal}
           habitacion={habitacionSeleccionada}
-          onReservaCreada={cargarHabitaciones} // 🔥 para refrescar después de reservar
+          onReservaCreada={cargarHabitaciones} 
         />
       )}
     </div>
