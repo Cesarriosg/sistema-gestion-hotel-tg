@@ -1,18 +1,14 @@
-
+// src/pages/Reservas.jsx
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import axios from "axios";
 import dayjs from "dayjs";
+import reservasService  from "../services/reservasService";
+import huespedesService from "../services/huespedesService";
 import {
   Table, Button, Badge, Form,
   Row, Col, Spinner, Modal, Card, Nav, Alert,
 } from "react-bootstrap";
 
-const API = "http://localhost:4000";
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
 
 // Lee el rol del payload JWT sin librerías externas
 const getRolActual = () => {
@@ -26,7 +22,7 @@ const getRolActual = () => {
   }
 };
 
-//  Helpers  
+// ── Helpers ──────────────────────────────────────────────────────────────────
 const estadoColor = (e) =>
   ({ reservada:"primary", ocupada:"success", cancelada:"secondary", finalizada:"dark" }[e] || "light");
 const estadoLabel = (e) =>
@@ -42,20 +38,20 @@ const TIPOS_DOC = ["CC","CE","PA","TI","NIT"];
 const semaforoColor = (s) =>
   ({ checked_in:"success", pendiente:"warning", no_show:"danger" }[s] || "secondary");
 const semaforoLabel = (s) =>
-  ({ checked_in:" Check-in hecho", pendiente:"⏳ Pendiente", no_show:"❌ No-show" }[s] || s);
+  ({ checked_in:"✅ Check-in hecho", pendiente:"⏳ Pendiente", no_show:"❌ No-show" }[s] || s);
 
 const accionHistLabel = (a) =>
   ({ created:"✨ Creada", updated:"✏️ Modificada", checkin:"🏨 Check-in",
      checkout:"🚪 Check-out", cancelada:"❌ Cancelada", no_show:"🚫 No-show",
      extendida:"📅 Extendida" }[a] || a);
 
-//  Componente   
+// ── Componente ────────────────────────────────────────────────────────────────
 export default function Reservas() {
   // Vista activa
   const [vista, setVista] = useState("lista");
   const esAdmin = getRolActual() === "admin";
 
-  //  Lista de reservas   
+  // ── Lista de reservas ─────────────────────────────────────────────────────
   const [reservas,   setReservas]   = useState([]);
   const [cargando,   setCargando]   = useState(true);
   const [error,      setError]      = useState("");
@@ -64,13 +60,13 @@ export default function Reservas() {
   const [filtroDesde,  setFiltroDesde]  = useState("");
   const [filtroHasta,  setFiltroHasta]  = useState("");
 
-  //  Llegadas del día   
+  // ── Llegadas del día ──────────────────────────────────────────────────────
   const [llegadas,         setLlegadas]         = useState([]);
   const [cargandoLlegadas, setCargandoLlegadas] = useState(false);
   const [errorLlegadas,    setErrorLlegadas]    = useState("");
   const [fechaLlegadas,    setFechaLlegadas]    = useState(dayjs().format("YYYY-MM-DD"));
 
-  //  Modal editar  
+  // ── Modal editar ──────────────────────────────────────────────────────────
   const [showModal,     setShowModal]     = useState(false);
   const [cargandoModal, setCargandoModal] = useState(false);
   const [guardando,     setGuardando]     = useState(false);
@@ -81,28 +77,28 @@ export default function Reservas() {
   const [habitaciones,  setHabitaciones]  = useState([]);
   const lastKeyRef = useRef("");
 
-  //  Modal extender  
+  // ── Modal extender ────────────────────────────────────────────────────────
   const [showExtender,    setShowExtender]    = useState(false);
   const [reservaExtender, setReservaExtender] = useState(null);
   const [nuevaFechaFin,   setNuevaFechaFin]   = useState("");
   const [extendiendo,     setExtendiendo]     = useState(false);
   const [errorExtender,   setErrorExtender]   = useState("");
 
-  //  Modal historial   
+  // ── Modal historial ───────────────────────────────────────────────────────
   const [showHistorial, setShowHistorial] = useState(false);
   const [historial,     setHistorial]     = useState([]);
   const [cargandoHist,  setCargandoHist]  = useState(false);
   const [reservaHistId, setReservaHistId] = useState(null);
 
-  //  Modal no-show  
+  // ── Modal no-show ─────────────────────────────────────────────────────────
   const [showNoShow,     setShowNoShow]     = useState(false);
   const [reservaNoShow,  setReservaNoShow]  = useState(null);
   const [marcandoNoShow, setMarcandoNoShow] = useState(false);
   const [errorNoShow,    setErrorNoShow]    = useState("");
 
-    
-  // Cargar reservas con filtros
-    
+  // ─────────────────────────────────────────────────────────────────────────
+  // HU-R7: Cargar reservas con filtros
+  // ─────────────────────────────────────────────────────────────────────────
   const cargarReservas = useCallback(async (opts = {}) => {
     try {
       setCargando(true); setError("");
@@ -115,7 +111,7 @@ export default function Reservas() {
       if (est !== "todas") params.estado = est;
       if (desde.trim())    params.desde  = desde.trim();
       if (hasta.trim())    params.hasta  = hasta.trim();
-      const r = await axios.get(`${API}/api/reservas`, { params, headers: getAuthHeaders() });
+      const r = await reservasService.listar(params);
       setReservas(Array.isArray(r.data) ? r.data : []);
     } catch (e) {
       setError(e?.response?.data?.message || "Error al cargar reservas.");
@@ -133,16 +129,13 @@ export default function Reservas() {
     cargarReservas({ q:"", estado:"todas", desde:"", hasta:"" });
   };
 
-    
-  //    Llegadas del día
-    
+  // ─────────────────────────────────────────────────────────────────────────
+  // HU-R13: Llegadas del día
+  // ─────────────────────────────────────────────────────────────────────────
   const cargarLlegadas = useCallback(async (fecha) => {
     try {
       setCargandoLlegadas(true); setErrorLlegadas("");
-      const r = await axios.get(`${API}/api/reservas/llegadas`, {
-        params: { fecha: fecha || fechaLlegadas },
-        headers: getAuthHeaders(),
-      });
+      const r = await reservasService.llegadas({ fecha: fecha || fechaLlegadas });
       setLlegadas(r.data.items || []);
     } catch (e) {
       setErrorLlegadas(e?.response?.data?.message || "Error al cargar llegadas.");
@@ -155,9 +148,9 @@ export default function Reservas() {
     if (vista === "llegadas") cargarLlegadas(fechaLlegadas);
   }, [vista, fechaLlegadas]); // eslint-disable-line
 
-    
-  //    Modal editar
-    
+  // ─────────────────────────────────────────────────────────────────────────
+  // HU-R4: Modal editar
+  // ─────────────────────────────────────────────────────────────────────────
   const abrirModal = async (reserva) => {
     setErrorModal(""); setTabActiva("reserva"); setHabitaciones([]);
     setCargandoModal(true); setShowModal(true);
@@ -173,10 +166,7 @@ export default function Reservas() {
     });
     setTitular(null);
     try {
-      const { data } = await axios.get(
-        `${API}/api/reservas/${reserva.id}/checkin/data`,
-        { headers: getAuthHeaders() }
-      );
+      const { data } = await reservasService.datosCheckin(reserva.id);
       setTitular({
         huesped_id:       data.huesped_id       || null,
         tipo_documento:   data.tipo_documento   || "",
@@ -189,12 +179,9 @@ export default function Reservas() {
       });
       if (reserva.estado === "reservada") {
         try {
-          const dispR = await axios.get(`${API}/api/reservas/disponibles`, {
-            params: {
-              desde: dayjs(reserva.fecha_inicio).format("YYYY-MM-DD"),
-              hasta: dayjs(reserva.fecha_fin).format("YYYY-MM-DD"),
-            },
-            headers: getAuthHeaders(),
+          const dispR = await reservasService.habitacionesDisp({
+            desde: dayjs(reserva.fecha_inicio).format("YYYY-MM-DD"),
+            hasta: dayjs(reserva.fecha_fin).format("YYYY-MM-DD"),
           });
           const lista = dispR.data || [];
           if (!lista.some(h => String(h.numero) === String(reserva.habitacion_numero)))
@@ -231,10 +218,7 @@ export default function Reservas() {
     lastKeyRef.current = key;
     const timer = setTimeout(async () => {
       try {
-        const r = await axios.get(`${API}/api/huespedes/buscar`, {
-          params: { tipo_documento: td, documento: doc },
-          headers: getAuthHeaders(),
-        });
+        const r = await huespedesService.buscar({ tipo_documento: td, documento: doc });
         if (lastKeyRef.current !== key) return;
         setTitular(p => ({
           ...p, huesped_id: r.data.id,
@@ -266,16 +250,17 @@ export default function Reservas() {
     }
     setGuardando(true);
     try {
-      await axios.put(`${API}/api/reservas/${reservaSel.id}`, {
+      const body = {
         fecha_inicio:      reservaSel.fecha_inicio,
         fecha_fin:         reservaSel.fecha_fin,
         notas:             reservaSel.notas || null,
         habitacion_numero: reservaSel.habitacion_numero || undefined,
         fuente:            reservaSel.fuente,
-      }, { headers: getAuthHeaders() });
+      };
+      await reservasService.actualizar(reservaSel.id, body);
 
       if (titular?.huesped_id && reservaSel.estado !== "finalizada") {
-        await axios.put(`${API}/api/huespedes/${titular.huesped_id}`, {
+        await huespedesService.actualizar(titular.huesped_id, {
           nombres:          titular.nombres.trim(),
           primer_apellido:  titular.primer_apellido.trim(),
           segundo_apellido: titular.segundo_apellido?.trim() || null,
@@ -283,7 +268,7 @@ export default function Reservas() {
           documento:        titular.documento?.trim() || null,
           telefono:         titular.telefono?.trim() || null,
           email:            titular.email?.trim()    || null,
-        }, { headers: getAuthHeaders() });
+        });
       }
       await cargarReservas(); cerrarModal();
     } catch (e) {
@@ -297,29 +282,28 @@ export default function Reservas() {
     }
   };
 
-    
-  //   5: Cancelar
-    
+  // ─────────────────────────────────────────────────────────────────────────
+  // HU-R5: Cancelar
+  // ─────────────────────────────────────────────────────────────────────────
   const cancelarReserva = async (r) => {
     if (!window.confirm(`¿Cancelar reserva #${r.id} de ${r.huesped_nombre || "este huésped"}?`)) return;
     try {
-      await axios.delete(`${API}/api/reservas/${r.id}`, { headers: getAuthHeaders() });
+      await reservasService.cancelar(r.id, {});
       await cargarReservas();
     } catch (e) {
       alert(e?.response?.data?.message || "No se pudo cancelar.");
     }
   };
 
-    
-  //   14: No-show
-    
+  // ─────────────────────────────────────────────────────────────────────────
+  // HU-R14: No-show
+  // ─────────────────────────────────────────────────────────────────────────
   const abrirNoShow = (r) => { setReservaNoShow(r); setErrorNoShow(""); setShowNoShow(true); };
   const confirmarNoShow = async () => {
     if (!reservaNoShow) return;
     setMarcandoNoShow(true); setErrorNoShow("");
     try {
-      await axios.post(`${API}/api/reservas/${reservaNoShow.id}/no-show`,
-        { usuario: "recepcion" }, { headers: getAuthHeaders() });
+      await reservasService.noShow(reservaNoShow.id, {});
       setShowNoShow(false);
       await cargarReservas();
       if (vista === "llegadas") await cargarLlegadas(fechaLlegadas);
@@ -330,9 +314,9 @@ export default function Reservas() {
     }
   };
 
-    
-  //   8: Extender estadía
-    
+  // ─────────────────────────────────────────────────────────────────────────
+  // HU-R8: Extender estadía
+  // ─────────────────────────────────────────────────────────────────────────
   const abrirExtender = (r) => {
     setReservaExtender(r);
     setNuevaFechaFin(dayjs(r.fecha_fin).add(1,"day").format("YYYY-MM-DD"));
@@ -342,9 +326,7 @@ export default function Reservas() {
     if (!reservaExtender || !nuevaFechaFin) return;
     setExtendiendo(true); setErrorExtender("");
     try {
-      await axios.post(`${API}/api/reservas/${reservaExtender.id}/extender`,
-        { nueva_fecha_fin: nuevaFechaFin, usuario: "recepcion" },
-        { headers: getAuthHeaders() });
+      await reservasService.extender(reservaExtender.id, { nueva_fecha_fin: nuevaFechaFin, usuario: "recepcion" });
       setShowExtender(false);
       await cargarReservas();
     } catch (e) {
@@ -354,22 +336,21 @@ export default function Reservas() {
     }
   };
 
-    
-  //   Historial
-    
+  // ─────────────────────────────────────────────────────────────────────────
+  // HU-R11: Historial
+  // ─────────────────────────────────────────────────────────────────────────
   const abrirHistorial = async (r) => {
     setReservaHistId(r.id); setHistorial([]); setCargandoHist(true); setShowHistorial(true);
     try {
-      const { data } = await axios.get(
-        `${API}/api/reservas/${r.id}/historial`, { headers: getAuthHeaders() });
+      const { data } = await reservasService.historial(r.id);
       setHistorial(data);
     } catch { setHistorial([]); }
     finally { setCargandoHist(false); }
   };
 
-    
+  // ─────────────────────────────────────────────────────────────────────────
   // Botones de acción por fila
-    
+  // ─────────────────────────────────────────────────────────────────────────
   const accionesFila = (r) => (
     <div className="d-flex gap-1 flex-wrap">
       {["reservada","ocupada"].includes(r.estado) && (
@@ -395,13 +376,13 @@ export default function Reservas() {
 
   const esSoloLectura = reservaSel?.estado === "ocupada" || reservaSel?.estado === "finalizada";
 
-    
+  // ─────────────────────────────────────────────────────────────────────────
   // Render
-    
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <div>
 
-      {/*  Cabecera ───────────────────────────────────────── */}
+      {/* ── Cabecera ───────────────────────────────────────── */}
       <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <div>
           <h3 className="mb-0">Gestión de reservas</h3>
@@ -413,12 +394,12 @@ export default function Reservas() {
           <Button size="sm"
             variant={vista === "lista" ? "primary" : "outline-primary"}
             onClick={() => { setVista("lista"); cargarReservas(); }}>
-             Lista
+            📋 Lista
           </Button>
           <Button size="sm"
             variant={vista === "llegadas" ? "primary" : "outline-primary"}
             onClick={() => setVista("llegadas")}>
-             Llegadas del día
+            🏨 Llegadas del día
           </Button>
         </div>
       </div>
@@ -509,7 +490,7 @@ export default function Reservas() {
       </>)}
 
       {/* ══════════════════════════════════════════════════════ */}
-      {/* VISTA LLEGADAS DEL DÍA —   13                     */}
+      {/* VISTA LLEGADAS DEL DÍA — HU-R13                     */}
       {/* ══════════════════════════════════════════════════════ */}
       {vista === "llegadas" && (<>
         <Card className="mb-3 shadow-sm">
@@ -528,7 +509,7 @@ export default function Reservas() {
               </Col>
               <Col className="d-flex align-items-end gap-3" style={{ fontSize: 13 }}>
                 <span><Badge bg="warning" text="dark">⏳</Badge> Pendiente</span>
-                <span><Badge bg="success"></Badge> Check-in hecho</span>
+                <span><Badge bg="success">✅</Badge> Check-in hecho</span>
                 <span><Badge bg="danger">❌</Badge> No-show</span>
               </Col>
             </Row>
@@ -628,7 +609,7 @@ export default function Reservas() {
               <Nav.Item><Nav.Link eventKey="huesped">👤 Titular</Nav.Link></Nav.Item>
             </Nav>
 
-            {/*  Tab Reserva  */}
+            {/* ── Tab Reserva ── */}
             {tabActiva === "reserva" && reservaSel && (
               <div>
                 {esSoloLectura && (
@@ -664,7 +645,7 @@ export default function Reservas() {
                   </Form.Group>
                 )}
 
-                {/*   15: Fuente */}
+                {/* HU-R15: Fuente */}
                 <Form.Group className="mb-3">
                   <Form.Label>Canal / Fuente de reserva</Form.Label>
                   <Form.Select value={reservaSel.fuente}
@@ -673,7 +654,7 @@ export default function Reservas() {
                   </Form.Select>
                 </Form.Group>
 
-                {/*   6: Notas */}
+                {/* HU-R6: Notas */}
                 <Form.Group>
                   <Form.Label>
                     Notas internas{" "}
@@ -686,7 +667,7 @@ export default function Reservas() {
               </div>
             )}
 
-            {/*  Tab Titular  */}
+            {/* ── Tab Titular ── */}
             {tabActiva === "huesped" && (
               <div>
                 {!titular ? (
@@ -775,7 +756,7 @@ export default function Reservas() {
       </Modal>
 
       {/* ══════════════════════════════════════════════════════ */}
-      {/* MODAL EXTENDER ESTADÍA —   8                       */}
+      {/* MODAL EXTENDER ESTADÍA — HU-R8                       */}
       {/* ══════════════════════════════════════════════════════ */}
       <Modal show={showExtender} onHide={() => setShowExtender(false)} centered>
         <Modal.Header closeButton>
@@ -813,7 +794,7 @@ export default function Reservas() {
       </Modal>
 
       {/* ══════════════════════════════════════════════════════ */}
-      {/* MODAL HISTORIAL —   11                             */}
+      {/* MODAL HISTORIAL — HU-R11                             */}
       {/* ══════════════════════════════════════════════════════ */}
       <Modal show={showHistorial} onHide={() => setShowHistorial(false)} centered size="lg">
         <Modal.Header closeButton>
@@ -861,7 +842,7 @@ export default function Reservas() {
       </Modal>
 
       {/* ══════════════════════════════════════════════════════ */}
-      {/* MODAL NO-SHOW —   14                               */}
+      {/* MODAL NO-SHOW — HU-R14                               */}
       {/* ══════════════════════════════════════════════════════ */}
       <Modal show={showNoShow} onHide={() => setShowNoShow(false)} centered>
         <Modal.Header closeButton>

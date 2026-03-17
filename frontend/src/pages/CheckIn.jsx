@@ -1,15 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import axios from "axios";
 import { useParams, useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
 import { Modal, Button, Alert, Spinner, Badge } from "react-bootstrap";
+import reservasService  from "../services/reservasService";
+import huespedesService from "../services/huespedesService";
 
-const API = "http://localhost:4000";
 
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
 
 const TIPOS_DOC = [
   { value: "", label: "Seleccione..." },
@@ -37,18 +33,18 @@ export default function CheckIn() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  //  datos reserva/habitación
+  // ✅ datos reserva/habitación
   const [habitacion, setHabitacion] = useState({ numero: "", tipo: "" });
   const [rango, setRango] = useState({ desde: "", hasta: "" });
   const [estadoReserva, setEstadoReserva] = useState(""); // reservada / ocupada / etc
 
-  //  plan + tarifa preview
+  // ✅ plan + tarifa preview
   const [plan, setPlan] = useState("C1");
   const [cargandoTarifa, setCargandoTarifa] = useState(false);
   const [tarifaErr, setTarifaErr] = useState("");
   const [tarifa, setTarifa] = useState(null); // {noches, precio_noche, total}
 
-  //  huésped titular
+  // ✅ huésped titular
   const [titular, setTitular] = useState({
     tipo_documento: "",
     documento: "",
@@ -59,10 +55,10 @@ export default function CheckIn() {
     email: "",
   });
 
-  //  acompañantes (HU-RH6)
+  // ✅ acompañantes (HU-RH6)
   const [acompanantes, setAcompanantes] = useState([]);
 
-  //  para editar huésped (solo cuando ya está ocupada)
+  // ✅ para editar huésped (solo cuando ya está ocupada)
   const [huespedId, setHuespedId] = useState(null);
   const [editMode, setEditMode] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -88,7 +84,7 @@ export default function CheckIn() {
     return parts.join(" ");
   }, [titular]);
 
-  const puedeEditar = estadoReserva === "ocupada"; //  solo si ya hizo check-in
+  const puedeEditar = estadoReserva === "ocupada"; // ✅ solo si ya hizo check-in
   const camposBloqueados = puedeEditar && !editMode; // en ocupada, bloquea salvo modo edición
 
   const validarTitularMinimo = () => {
@@ -99,16 +95,14 @@ export default function CheckIn() {
     return "";
   };
 
-  //  cargar data inicial del check-in
+  // ✅ cargar data inicial del check-in
   const cargar = async () => {
     setError("");
     setOk("");
     try {
-      const r = await axios.get(`${API}/api/reservas/${id}/checkin/data`, {
-        headers: getAuthHeaders(),
-      });
+      const r = await reservasService.datosCheckin(id);
 
-      //  IMPORTANTE: normalizar fechas a YYYY-MM-DD (evita ISO con hora)
+      // ✅ IMPORTANTE: normalizar fechas a YYYY-MM-DD (evita ISO con hora)
       const desde = r.data.fecha_inicio ? dayjs(r.data.fecha_inicio).format("YYYY-MM-DD") : "";
       const hasta = r.data.fecha_fin ? dayjs(r.data.fecha_fin).format("YYYY-MM-DD") : "";
 
@@ -140,7 +134,7 @@ export default function CheckIn() {
         email: r.data.email || "",
       }));
 
-      //  si ya tienes endpoint para traer acompañantes, aquí podrías setearlos
+      // ✅ si ya tienes endpoint para traer acompañantes, aquí podrías setearlos
       // por ahora dejamos vacío (se agregan antes del check-in)
       setAcompanantes([]);
       setEditMode(false);
@@ -154,7 +148,7 @@ export default function CheckIn() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  //  cargar tarifa preview
+  // ✅ cargar tarifa preview
   const cargarTarifa = async () => {
     setTarifaErr("");
     setTarifa(null);
@@ -173,10 +167,7 @@ export default function CheckIn() {
 
     try {
       setCargandoTarifa(true);
-      const r = await axios.get(`${API}/api/reservas/previsualizarPrecioReserva`, {
-        params: { tipo: tipoHabitacion, plan, desde, hasta },
-        headers: getAuthHeaders(),
-      });
+      const r = await reservasService.previsualizarPrecio({ tipo: tipoHabitacion, plan, desde, hasta });
       setTarifa(r.data);
     } catch (e) {
       setTarifaErr(e?.response?.data?.message || "No se pudo calcular la tarifa.");
@@ -190,7 +181,7 @@ export default function CheckIn() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, habitacion.tipo, rango.desde, rango.hasta]);
 
-  //  Acompañantes (HU-RH6)
+  // ✅ Acompañantes (HU-RH6)
   const agregarAcompanante = () => {
     setAcompanantes((prev) => [
       ...prev,
@@ -216,7 +207,7 @@ export default function CheckIn() {
     );
   };
 
-  //  confirmar edición (solo ocupada)
+  // ✅ confirmar edición (solo ocupada)
   const abrirConfirmacionEdicion = () => {
     setError("");
     setOk("");
@@ -240,19 +231,7 @@ export default function CheckIn() {
       setError("");
       setOk("");
 
-      await axios.put(
-        `${API}/api/huespedes/${huespedId}`,
-        {
-          nombres: titular.nombres,
-          primer_apellido: titular.primer_apellido,
-          segundo_apellido: titular.segundo_apellido || null,
-          tipo_documento: titular.tipo_documento,
-          documento: titular.documento,
-          telefono: titular.telefono || null,
-          email: titular.email || null,
-        },
-        { headers: getAuthHeaders() }
-      );
+      await huespedesService.actualizar(huespedId, { nombres: titular.nombres, primer_apellido: titular.primer_apellido, segundo_apellido: titular.segundo_apellido || null, tipo_documento: titular.tipo_documento, documento: titular.documento, telefono: titular.telefono || null, email: titular.email || null });
 
       setOk("Datos del huésped actualizados correctamente.");
       setEditMode(false);
@@ -265,7 +244,7 @@ export default function CheckIn() {
     }
   };
 
-  //  CHECK-IN (ANTES: se ingresan datos como si fuera primera vez)
+  // ✅ CHECK-IN (ANTES: se ingresan datos como si fuera primera vez)
   const registrarCheckIn = async () => {
     const msg = validarTitularMinimo();
     if (msg) {
@@ -282,17 +261,7 @@ export default function CheckIn() {
       setError("");
       setOk("");
 
-      await axios.post(
-        `${API}/api/reservas/${id}/checkin`,
-        {
-          titular: {
-            ...titular,
-            nombre_completo: nombreCompleto,
-          },
-          acompanantes, //  HU-RH6 se guarda en BD
-        },
-        { headers: getAuthHeaders() }
-      );
+      await reservasService.checkin(id, { titular: { ...titular, nombre_completo: nombreCompleto }, acompanantes });
 
       setOk("Check-in realizado correctamente.");
       // si quieres irte al panel
@@ -315,11 +284,7 @@ export default function CheckIn() {
     if (!nuevaFechaFin) return;
     setExtendiendo(true); setErrorExtender("");
     try {
-      await axios.post(
-        `${API}/api/reservas/${id}/extender`,
-        { nueva_fecha_fin: nuevaFechaFin, usuario: "recepcion" },
-        { headers: getAuthHeaders() }
-      );
+      await reservasService.extender(id, { nueva_fecha_fin: nuevaFechaFin, usuario: "recepcion" });
       setShowExtender(false);
       setOk(`Estadía extendida hasta el ${dayjs(nuevaFechaFin).format("DD/MM/YYYY")}.`);
       await cargar();
@@ -334,10 +299,7 @@ export default function CheckIn() {
   const imprimirRegistro = async () => {
     setGenerandoPdf(true);
     try {
-      const response = await axios.get(
-        `${API}/api/reservas/${id}/registro-hotelero`,
-        { headers: getAuthHeaders(), responseType: "blob" }
-      );
+      const response = await reservasService.obtenerRegistro(id);
       const url  = window.URL.createObjectURL(
         new Blob([response.data], { type: "application/pdf" })
       );
@@ -371,7 +333,7 @@ export default function CheckIn() {
             </div>
 
             <div className="d-flex gap-2">
-              {/*  SOLO aparece si ya está ocupada */}
+              {/* ✅ SOLO aparece si ya está ocupada */}
               {puedeEditar && (!editMode ? (
                 <button
                   className="btn btn-outline-primary"
@@ -434,7 +396,7 @@ export default function CheckIn() {
           {error && <Alert variant="danger">{error}</Alert>}
           {ok && <Alert variant="success">{ok}</Alert>}
 
-          {/*  PLAN + TARIFA (NO quitar) */}
+          {/* ✅ PLAN + TARIFA (NO quitar) */}
           <div className="row g-3 mb-3">
             <div className="col-md-6">
               <div className="card border-0" style={{ background: "#f8fafc" }}>
@@ -497,7 +459,7 @@ export default function CheckIn() {
             </div>
           </div>
 
-          {/*  TITULAR */}
+          {/* ✅ TITULAR */}
           <h5 className="mb-3">Titular</h5>
 
           <div className="row g-3">
@@ -579,7 +541,7 @@ export default function CheckIn() {
             </div>
           </div>
 
-          {/*  ACOMPAÑANTES (ANTES DEL CHECK-IN) */}
+          {/* ✅ ACOMPAÑANTES (ANTES DEL CHECK-IN) */}
           {!puedeEditar && (
             <>
               <hr className="my-4" />
@@ -702,7 +664,7 @@ export default function CheckIn() {
 
           <hr className="my-4" />
 
-          {/*  CONFIRMAR CHECK-IN */}
+          {/* ✅ CONFIRMAR CHECK-IN */}
           {!puedeEditar && (
             <button className="btn btn-primary w-100" onClick={registrarCheckIn} disabled={guardando}>
               {guardando ? (
@@ -711,7 +673,7 @@ export default function CheckIn() {
                   Confirmando...
                 </>
               ) : (
-                "Confirmar Check-In "
+                "Confirmar Check-In ✅"
               )}
             </button>
           )}
@@ -760,7 +722,7 @@ export default function CheckIn() {
         </Modal.Footer>
       </Modal>
 
-      {/*  MODAL CONFIRMACIÓN DE EDICIÓN */}
+      {/* ✅ MODAL CONFIRMACIÓN DE EDICIÓN */}
       <Modal show={showConfirm} onHide={() => setShowConfirm(false)} centered>
         <Modal.Header closeButton>
           <Modal.Title>Confirmar actualización</Modal.Title>

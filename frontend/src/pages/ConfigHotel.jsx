@@ -1,362 +1,221 @@
+// src/pages/ConfigHotel.jsx
+// ✅ Configuración del hotel: nombre, dirección, NIT, contacto, fecha operativa
+import { useEffect, useState } from "react";
+import { Card, Form, Button, Alert, Spinner, Row, Col, Badge } from "react-bootstrap";
+import hotelService from "../services/hotelService";
 
-import { useEffect, useState, useCallback } from "react";
-import axios from "axios";
-import dayjs from "dayjs";
-import {
-  Card, Table, Button, Badge, Form, Row, Col,
-  Modal, Alert, Spinner,
-} from "react-bootstrap";
 
-const API = "http://localhost:4000";
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
-
-const money = (v) => Number(v).toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
-
-const PLANES     = ["C1", "GK"];
-const TEMPORADAS = ["base", "alta", "especial"];
-const temporadaLabel = (t) => ({ base: "Base", alta: "Alta", especial: "Especial" }[t] || t);
-const temporadaColor = (t) => ({ base: "secondary", alta: "warning", especial: "info" }[t] || "light");
-
-const FORM_VACIO = {
-  tipo_habitacion: "", plan: "C1", precio: "",
-  fecha_inicio: "", fecha_fin: "", temporada: "base",
-};
-
-export default function Tarifas() {
-  const [tarifas,   setTarifas]   = useState([]);
-  const [tipos,     setTipos]     = useState([]);
-  const [cargando,  setCargando]  = useState(false);
-  const [error,     setError]     = useState("");
-
-  // Filtros
-  const [fPlan,  setFPlan]  = useState("");
-  const [fTipo,  setFTipo]  = useState("");
-  const [fVig,   setFVig]   = useState(""); // "true" | "false" | ""
-
-  // Modal
-  const [showModal,  setShowModal]  = useState(false);
-  const [modoModal,  setModoModal]  = useState("crear"); // "crear" | "editar"
-  const [form,       setForm]       = useState(FORM_VACIO);
+export default function ConfigHotel() {
+  const [config,     setConfig]     = useState(null);
+  const [cargando,   setCargando]   = useState(true);
   const [guardando,  setGuardando]  = useState(false);
-  const [errorModal, setErrorModal] = useState("");
-  const [okModal,    setOkModal]    = useState("");
-  const [editId,     setEditId]     = useState(null);
+  const [error,      setError]      = useState("");
+  const [ok,         setOk]         = useState("");
 
-  // Confirmar borrar
-  const [showBorrar,  setShowBorrar]  = useState(false);
-  const [borrandoId,  setBorrandoId]  = useState(null);
-  const [borrando,    setBorrando]    = useState(false);
-  const [errorBorrar, setErrorBorrar] = useState("");
+  const [form, setForm] = useState({
+    nombre: "", direccion: "", ciudad: "", telefono: "", email: "", nit: "",
+  });
 
-  // Carga
-  const cargar = useCallback(async () => {
+  // Fecha operativa
+  const [nuevaFecha,    setNuevaFecha]    = useState("");
+  const [guardandoFecha, setGuardandoFecha] = useState(false);
+  const [errorFecha,    setErrorFecha]    = useState("");
+  const [okFecha,       setOkFecha]       = useState("");
+
+  const cargar = async () => {
     setCargando(true); setError("");
     try {
-      const params = {};
-      if (fPlan)  params.plan            = fPlan;
-      if (fTipo)  params.tipo_habitacion = fTipo;
-      if (fVig)   params.vigente         = fVig;
-      const { data } = await axios.get(`${API}/api/tarifas`, { params, headers: getAuthHeaders() });
-      setTarifas(data || []);
+      const { data } = await hotelService.config();
+      setConfig(data);
+      setForm({
+        nombre:    data.nombre    || "",
+        direccion: data.direccion || "",
+        ciudad:    data.ciudad    || "",
+        telefono:  data.telefono  || "",
+        email:     data.email     || "",
+        nit:       data.nit       || "",
+      });
+      setNuevaFecha(
+        data.fecha_sistema
+          ? new Date(data.fecha_sistema).toISOString().slice(0, 10)
+          : ""
+      );
     } catch (e) {
-      setError(e?.response?.data?.message || "No se pudieron cargar las tarifas.");
+      setError(e?.response?.data?.message || "No se pudo cargar la configuración.");
     } finally {
       setCargando(false);
     }
-  }, [fPlan, fTipo, fVig]);
-
-  const cargarTipos = async () => {
-    try {
-      const { data } = await axios.get(`${API}/api/tipos-habitacion`, { headers: getAuthHeaders() });
-      setTipos((data || []).filter(t => t.activo));
-    } catch { setTipos([]); }
   };
 
-  useEffect(() => { cargar(); cargarTipos(); }, []);  // eslint-disable-line
-  const filtrar = () => cargar();
+  useEffect(() => { cargar(); }, []);
 
   const hf = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-  // ── Abrir crear ─────────────────────────────────────────────────────────
-  const abrirCrear = () => {
-    setForm({ ...FORM_VACIO, tipo_habitacion: tipos[0]?.nombre || "" });
-    setModoModal("crear"); setEditId(null);
-    setErrorModal(""); setOkModal("");
-    setShowModal(true);
-  };
-
-  // ── Abrir editar ─────────────────────────────────────────────────────────
-  const abrirEditar = (t) => {
-    setForm({
-      tipo_habitacion: t.tipo_habitacion,
-      plan:            t.plan,
-      precio:          t.precio,
-      fecha_inicio:    dayjs(t.fecha_inicio).format("YYYY-MM-DD"),
-      fecha_fin:       dayjs(t.fecha_fin).format("YYYY-MM-DD"),
-      temporada:       t.temporada || "base",
-    });
-    setModoModal("editar"); setEditId(t.id);
-    setErrorModal(""); setOkModal("");
-    setShowModal(true);
-  };
-
-  // ── Guardar ──────────────────────────────────────────────────────────────
   const guardar = async () => {
-    setErrorModal(""); setOkModal("");
-    if (!form.tipo_habitacion) { setErrorModal("Selecciona el tipo de habitación."); return; }
-    if (!form.plan)            { setErrorModal("Selecciona el plan."); return; }
-    if (!form.precio || Number(form.precio) <= 0) { setErrorModal("El precio debe ser mayor a 0."); return; }
-    if (!form.fecha_inicio)    { setErrorModal("La fecha de inicio es obligatoria."); return; }
-    if (!form.fecha_fin)       { setErrorModal("La fecha de fin es obligatoria."); return; }
-    if (form.fecha_fin < form.fecha_inicio) { setErrorModal("La fecha fin debe ser posterior al inicio."); return; }
-
+    setError(""); setOk("");
+    if (!form.nombre.trim()) { setError("El nombre del hotel es obligatorio."); return; }
     setGuardando(true);
     try {
-      if (modoModal === "crear") {
-        await axios.post(`${API}/api/tarifas`, form, { headers: getAuthHeaders() });
-        setOkModal("Tarifa creada correctamente.");
-      } else {
-        await axios.put(`${API}/api/tarifas/${editId}`, form, { headers: getAuthHeaders() });
-        setOkModal("Tarifa actualizada correctamente.");
-      }
+      await hotelService.actualizarConfig(form);
+      setOk("Configuración guardada correctamente.");
       await cargar();
-      setTimeout(() => setShowModal(false), 900);
     } catch (e) {
-      setErrorModal(e?.response?.data?.message || "No se pudo guardar.");
+      setError(e?.response?.data?.message || "No se pudo guardar la configuración.");
     } finally {
       setGuardando(false);
     }
   };
 
-  // ── Borrar ───────────────────────────────────────────────────────────────
-  const confirmarBorrar = async () => {
-    setBorrando(true); setErrorBorrar("");
+  const guardarFecha = async () => {
+    setErrorFecha(""); setOkFecha("");
+    if (!nuevaFecha) { setErrorFecha("Selecciona una fecha."); return; }
+    setGuardandoFecha(true);
     try {
-      await axios.delete(`${API}/api/tarifas/${borrandoId}`, { headers: getAuthHeaders() });
-      setShowBorrar(false);
+      await hotelService.actualizarFecha({ nueva_fecha: nuevaFecha });
+      setOkFecha("Fecha operativa actualizada.");
       await cargar();
     } catch (e) {
-      setErrorBorrar(e?.response?.data?.message || "No se pudo eliminar.");
+      setErrorFecha(e?.response?.data?.message || "No se pudo actualizar la fecha.");
     } finally {
-      setBorrando(false);
+      setGuardandoFecha(false);
     }
   };
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  if (cargando) {
+    return (
+      <div className="text-center py-5">
+        <Spinner animation="border" />
+        <div className="mt-2 text-muted">Cargando configuración...</div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto", paddingTop: 14, paddingBottom: 24 }}>
-      <Card className="shadow-sm">
+    <div style={{ maxWidth: 860, margin: "0 auto", paddingTop: 14, paddingBottom: 32 }}>
+
+      {/* ── Configuración general ─────────────────────────────────────────── */}
+      <Card className="shadow-sm mb-4">
         <Card.Body>
-          {/* Cabecera */}
-          <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
-            <div>
-              <h3 className="mb-0">💰 Gestión de Tarifas</h3>
-              <div className="text-muted" style={{ fontSize: 13 }}>
-                Define precios por tipo de habitación, plan y temporada con vigencias de fechas.
-              </div>
-            </div>
-            <Button variant="primary" onClick={abrirCrear}>
-              ➕ Nueva tarifa
-            </Button>
-          </div>
+          <h4 className="mb-1">🏨 Datos del Hotel</h4>
+          <p className="text-muted mb-3" style={{ fontSize: 13 }}>
+            Esta información aparece en el PDF del Registro Hotelero y documentos generados.
+          </p>
 
           {error && <Alert variant="danger" className="py-2">{error}</Alert>}
+          {ok    && <Alert variant="success" className="py-2">{ok}</Alert>}
 
-          {/* Filtros */}
-          <Row className="g-2 mb-3 align-items-end">
-            <Col md={3}>
-              <Form.Label className="mb-1">Tipo habitación</Form.Label>
-              <Form.Select value={fTipo} onChange={e => setFTipo(e.target.value)}>
-                <option value="">Todos</option>
-                {tipos.map(t => <option key={t.id} value={t.nombre}>{t.nombre}</option>)}
-              </Form.Select>
+          <Row className="g-3">
+            <Col md={8}>
+              <Form.Label>Nombre del hotel *</Form.Label>
+              <Form.Control
+                value={form.nombre}
+                onChange={e => hf("nombre", e.target.value)}
+                placeholder="Ej: Hotel Gran Pacífico"
+              />
             </Col>
-            <Col md={2}>
-              <Form.Label className="mb-1">Plan</Form.Label>
-              <Form.Select value={fPlan} onChange={e => setFPlan(e.target.value)}>
-                <option value="">Todos</option>
-                {PLANES.map(p => <option key={p} value={p}>{p}</option>)}
-              </Form.Select>
+            <Col md={4}>
+              <Form.Label>NIT / RUT</Form.Label>
+              <Form.Control
+                value={form.nit}
+                onChange={e => hf("nit", e.target.value)}
+                placeholder="Ej: 900.123.456-7"
+              />
             </Col>
-            <Col md={2}>
-              <Form.Label className="mb-1">Vigencia</Form.Label>
-              <Form.Select value={fVig} onChange={e => setFVig(e.target.value)}>
-                <option value="">Todas</option>
-                <option value="true">Solo vigentes hoy</option>
-              </Form.Select>
+
+            <Col md={8}>
+              <Form.Label>Dirección</Form.Label>
+              <Form.Control
+                value={form.direccion}
+                onChange={e => hf("direccion", e.target.value)}
+                placeholder="Ej: Calle 10 # 5-23"
+              />
             </Col>
-            <Col md="auto">
-              <Button variant="outline-primary" onClick={filtrar} disabled={cargando}>
-                Filtrar
-              </Button>
-              <Button variant="outline-secondary" className="ms-2"
-                onClick={() => { setFPlan(""); setFTipo(""); setFVig(""); setTimeout(cargar, 0); }}>
-                Limpiar
-              </Button>
+            <Col md={4}>
+              <Form.Label>Ciudad</Form.Label>
+              <Form.Control
+                value={form.ciudad}
+                onChange={e => hf("ciudad", e.target.value)}
+                placeholder="Ej: Tuluá"
+              />
+            </Col>
+
+            <Col md={6}>
+              <Form.Label>Teléfono</Form.Label>
+              <Form.Control
+                value={form.telefono}
+                onChange={e => hf("telefono", e.target.value)}
+                placeholder="Ej: 602 225 1234"
+              />
+            </Col>
+            <Col md={6}>
+              <Form.Label>Email de contacto</Form.Label>
+              <Form.Control
+                type="email"
+                value={form.email}
+                onChange={e => hf("email", e.target.value)}
+                placeholder="reservas@hotel.com"
+              />
             </Col>
           </Row>
 
-          {/* Tabla */}
-          {cargando ? (
-            <div className="text-center py-4"><Spinner animation="border" /></div>
-          ) : tarifas.length === 0 ? (
-            <Alert variant="warning">No hay tarifas registradas con esos filtros.</Alert>
-          ) : (
-            <div className="table-responsive">
-              <Table striped hover size="sm" className="align-middle">
-                <thead className="table-dark">
-                  <tr>
-                    <th>Tipo habitación</th>
-                    <th>Plan</th>
-                    <th>Precio / noche</th>
-                    <th>Temporada</th>
-                    <th>Desde</th>
-                    <th>Hasta</th>
-                    <th>Estado</th>
-                    <th style={{ width: 110 }}>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tarifas.map(t => (
-                    <tr key={t.id}>
-                      <td className="fw-semibold">{t.tipo_habitacion}</td>
-                      <td><Badge bg="primary">{t.plan}</Badge></td>
-                      <td className="fw-bold text-success">{money(t.precio)}</td>
-                      <td>
-                        <Badge bg={temporadaColor(t.temporada)} text={t.temporada === "alta" ? "dark" : undefined}>
-                          {temporadaLabel(t.temporada)}
-                        </Badge>
-                      </td>
-                      <td>{dayjs(t.fecha_inicio).format("DD/MM/YYYY")}</td>
-                      <td>{dayjs(t.fecha_fin).format("DD/MM/YYYY")}</td>
-                      <td>
-                        {t.vigente_hoy
-                          ? <Badge bg="success"> Vigente</Badge>
-                          : <Badge bg="secondary">Inactiva</Badge>}
-                      </td>
-                      <td>
-                        <div className="d-flex gap-1">
-                          <Button size="sm" variant="outline-primary" onClick={() => abrirEditar(t)}>
-                            ✏️
-                          </Button>
-                          <Button size="sm" variant="outline-danger"
-                            onClick={() => { setBorrandoId(t.id); setErrorBorrar(""); setShowBorrar(true); }}>
-                            🗑️
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-              <div className="text-muted" style={{ fontSize: 12 }}>
-                {tarifas.length} tarifa(s) — {tarifas.filter(t => t.vigente_hoy).length} vigentes hoy
-              </div>
-            </div>
-          )}
+          <div className="mt-3 d-flex justify-content-end">
+            <Button variant="primary" onClick={guardar} disabled={guardando}>
+              {guardando
+                ? <><Spinner animation="border" size="sm" className="me-2" />Guardando...</>
+                : "💾 Guardar configuración"}
+            </Button>
+          </div>
         </Card.Body>
       </Card>
 
-      {/* ══ MODAL CREAR / EDITAR ══════════════════════════════════════════════ */}
-      <Modal show={showModal} onHide={() => setShowModal(false)} centered>
-        <Modal.Header closeButton>
-          <Modal.Title>
-            {modoModal === "crear" ? "➕ Nueva tarifa" : "✏️ Editar tarifa"}
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {errorModal && <Alert variant="danger" className="py-2 mb-3">{errorModal}</Alert>}
-          {okModal    && <Alert variant="success" className="py-2 mb-3">{okModal}</Alert>}
+      {/* ── Fecha operativa ───────────────────────────────────────────────── */}
+      <Card className="shadow-sm">
+        <Card.Body>
+          <h4 className="mb-1">📅 Fecha Operativa del Hotel</h4>
+          <p className="text-muted mb-3" style={{ fontSize: 13 }}>
+            La fecha operativa controla el día de referencia del sistema (Rack, Auditoría, etc.).
+            Normalmente se avanza automáticamente con el <strong>Cierre de Día</strong>. Cámbiala
+            manualmente solo si es estrictamente necesario.
+          </p>
 
-          <Row className="g-2">
-            <Col md={7}>
-              <Form.Label>Tipo de habitación *</Form.Label>
-              <Form.Select value={form.tipo_habitacion} onChange={e => hf("tipo_habitacion", e.target.value)}>
-                <option value="">Seleccione...</option>
-                {tipos.map(t => <option key={t.id} value={t.nombre}>{t.nombre} ({t.codigo})</option>)}
-              </Form.Select>
-            </Col>
-            <Col md={5}>
-              <Form.Label>Plan *</Form.Label>
-              <Form.Select value={form.plan} onChange={e => hf("plan", e.target.value)}>
-                {PLANES.map(p => <option key={p} value={p}>{p}</option>)}
-              </Form.Select>
-            </Col>
+          {config?.fecha_sistema && (
+            <div className="mb-3">
+              <span className="text-muted me-2">Fecha actual del sistema:</span>
+              <Badge bg="dark" style={{ fontSize: 14 }}>
+                {new Date(config.fecha_sistema).toLocaleDateString("es-CO", {
+                  weekday: "long", year: "numeric", month: "long", day: "numeric",
+                })}
+              </Badge>
+            </div>
+          )}
 
-            <Col md={6}>
-              <Form.Label>Precio por noche * (COP)</Form.Label>
+          {errorFecha && <Alert variant="danger" className="py-2">{errorFecha}</Alert>}
+          {okFecha    && <Alert variant="success" className="py-2">{okFecha}</Alert>}
+
+          <Row className="g-2 align-items-end">
+            <Col md={4}>
+              <Form.Label>Nueva fecha operativa</Form.Label>
               <Form.Control
-                type="number" min="1" value={form.precio}
-                onChange={e => hf("precio", e.target.value)}
-                placeholder="Ej: 190000"
+                type="date"
+                value={nuevaFecha}
+                onChange={e => setNuevaFecha(e.target.value)}
               />
             </Col>
-            <Col md={6}>
-              <Form.Label>Temporada</Form.Label>
-              <Form.Select value={form.temporada} onChange={e => hf("temporada", e.target.value)}>
-                {TEMPORADAS.map(t => <option key={t} value={t}>{temporadaLabel(t)}</option>)}
-              </Form.Select>
-            </Col>
-
-            <Col md={6}>
-              <Form.Label>Fecha inicio vigencia *</Form.Label>
-              <Form.Control
-                type="date" value={form.fecha_inicio}
-                onChange={e => hf("fecha_inicio", e.target.value)}
-              />
-            </Col>
-            <Col md={6}>
-              <Form.Label>Fecha fin vigencia *</Form.Label>
-              <Form.Control
-                type="date" value={form.fecha_fin}
-                min={form.fecha_inicio || undefined}
-                onChange={e => hf("fecha_fin", e.target.value)}
-              />
+            <Col md="auto">
+              <Button variant="warning" onClick={guardarFecha} disabled={guardandoFecha}>
+                {guardandoFecha
+                  ? <><Spinner animation="border" size="sm" className="me-2" />Actualizando...</>
+                  : "Actualizar fecha"}
+              </Button>
             </Col>
           </Row>
 
-          {form.precio && form.fecha_inicio && form.fecha_fin && form.fecha_fin >= form.fecha_inicio && (
-            <div className="mt-3 p-2 rounded" style={{ background: "#f0fdf4", fontSize: 13 }}>
-              <strong>Resumen:</strong> {form.tipo_habitacion || "—"} · Plan {form.plan} ·{" "}
-              {money(Number(form.precio))} por noche · {temporadaLabel(form.temporada)} ·{" "}
-              {dayjs(form.fecha_inicio).format("DD/MM/YYYY")} → {dayjs(form.fecha_fin).format("DD/MM/YYYY")} (
-              {dayjs(form.fecha_fin).diff(dayjs(form.fecha_inicio), "day") + 1} días)
-            </div>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="outline-secondary" onClick={() => setShowModal(false)} disabled={guardando}>
-            Cancelar
-          </Button>
-          <Button variant="primary" onClick={guardar} disabled={guardando}>
-            {guardando
-              ? <><Spinner animation="border" size="sm" className="me-2" />Guardando...</>
-              : modoModal === "crear" ? "Crear tarifa" : "Guardar cambios"}
-          </Button>
-        </Modal.Footer>
-      </Modal>
-
-      {/* ══ MODAL CONFIRMAR BORRAR ════════════════════════════════════════════ */}
-      <Modal show={showBorrar} onHide={() => setShowBorrar(false)} centered size="sm">
-        <Modal.Header closeButton>
-          <Modal.Title>⚠️ Eliminar tarifa</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <p>¿Estás seguro de que deseas eliminar esta tarifa? Esta acción no se puede deshacer.</p>
-          {errorBorrar && <Alert variant="danger" className="py-2">{errorBorrar}</Alert>}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="outline-secondary" onClick={() => setShowBorrar(false)} disabled={borrando}>
-            Cancelar
-          </Button>
-          <Button variant="danger" onClick={confirmarBorrar} disabled={borrando}>
-            {borrando ? "Eliminando..." : "Sí, eliminar"}
-          </Button>
-        </Modal.Footer>
-      </Modal>
+          <Alert variant="warning" className="mt-3 py-2" style={{ fontSize: 13 }}>
+            ⚠️ Cambiar la fecha manualmente puede afectar la auditoría nocturna y los cargos de alojamiento.
+            Se recomienda usar el módulo de <strong>Cierre de Día</strong> para avanzar la fecha.
+          </Alert>
+        </Card.Body>
+      </Card>
     </div>
   );
 }

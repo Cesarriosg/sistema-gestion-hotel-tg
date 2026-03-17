@@ -1,47 +1,35 @@
+// src/routes/otas.routes.js
 import { Router } from "express";
-import { verificarOtaSecret } from "../middlewares/otaMiddleware.js";
+import { verificarToken, soloAdmin } from "../middlewares/authMiddleware.js";
+import { verificarOtaSecret }       from "../middlewares/otaMiddleware.js";
+import { verificarChannexWebhook }  from "../middlewares/channexWebhookAuth.js";
 import {
+  channexWebhook,
   otaCrearOActualizarReservaSandbox,
   otaCancelarReservaSandbox,
   otaGetConfig,
   otaUpsertConfig,
   otaStatsReservas,
+  otaSyncLog,
 } from "../controllers/otas.controller.js";
-import { verificarChannexWebhook } from "../middlewares/channexWebhookAuth.js";
-//import { channexWebhook } from "../controllers/otas.controller.js"; 
-import { channexWebhook } from "../controllers/otas.controller.js";
 
 const router = Router();
 
-/**
- *  Webhook sandbox (NO JWT). Se protege con x-ota-secret
- * POST /api/otas/sandbox/reserva
- */
-router.post("/sandbox/reserva", verificarOtaSecret, otaCrearOActualizarReservaSandbox);
+// ── Webhook Channex (RF-15 entrante) — sin JWT, Channex llama desde fuera ───
+router.post("/channex/webhook", verificarChannexWebhook, channexWebhook);
 
-/**
- *  Cancelación (idempotente)
- * POST /api/otas/sandbox/reserva/cancelar
- * body: { ota_canal, ota_reserva_id, motivo? }
- */
+// ── Sandbox (pruebas sin Channex real) ──────────────────────────────────────
+router.post("/sandbox/reserva",          verificarOtaSecret, otaCrearOActualizarReservaSandbox);
 router.post("/sandbox/reserva/cancelar", verificarOtaSecret, otaCancelarReservaSandbox);
 
-/**
- *  Configuración por OTA (SOLO ADMIN, pero como es TG puedes dejarlo con JWT más adelante)
- * Para tu demo lo puedes proteger también con x-ota-secret o con JWT admin.
- *
- * GET  /api/otas/config/:ota_canal
- * PUT  /api/otas/config/:ota_canal
- */
-router.get("/config/:ota_canal", otaGetConfig);
-router.put("/config/:ota_canal", otaUpsertConfig);
+// ── Config por canal (solo admin) ───────────────────────────────────────────
+router.get("/config/:ota_canal",  verificarToken, soloAdmin, otaGetConfig);
+router.put("/config/:ota_canal",  verificarToken, soloAdmin, otaUpsertConfig);
 
-/**
- *  Estadísticas
- * GET /api/otas/stats/reservas?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
- */
-router.get("/stats/reservas", otaStatsReservas);
+// ── Estadísticas ─────────────────────────────────────────────────────────────
+router.get("/stats/reservas",     verificarToken, otaStatsReservas);
 
-router.post("/channex/webhook", channexWebhook);
+// ── Log de sincronizaciones RF-16/17 ────────────────────────────────────────
+router.get("/sync-log",           verificarToken, soloAdmin, otaSyncLog);
 
 export default router;

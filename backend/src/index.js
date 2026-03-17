@@ -9,7 +9,8 @@ import hotelRoutes from "./routes/hotel.routes.js";
 import huespedesRoutes from "./routes/huespedes.routes.js";
 import habitacionesRoutes from "./routes/habitaciones.routes.js";
 import reservasRoutes from "./routes/reservas.routes.js";
-import serviciosroutes from "./routes/servicios.routes.js";
+import serviciosConsumidosRoutes from "./routes/servicios_consumidos.routes.js";
+import serviciosRoutes           from "./routes/servicios.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import configRoutes from "./routes/config.routes.js";
 import pagosRoutes from "./routes/pagos.routes.js";
@@ -19,7 +20,9 @@ import cargosRoutes from "./routes/cargos.routes.js";
 import auditoriaRoutes from "./routes/auditoria.routes.js";
 import tiposHabitacionRoutes from "./routes/tiposHabitacion.routes.js";
 import usuariosRoutes from "./routes/usuarios.routes.js";
-import otasRoutes from "./routes/otas.routes.js";
+import otasRoutes      from "./routes/otas.routes.js";
+import reportesRoutes  from "./routes/reportes.routes.js";
+import tarifasRoutes   from "./routes/tarifas.routes.js";
 
 dotenv.config();
 
@@ -50,6 +53,21 @@ const io = new SocketIOServer(server, {
 // Hacer io accesible desde controllers
 app.set("io", io);
 
+
+// ── Notificaciones internas RF-03 ─────────────────────────────────────────
+const _notifs = [];
+app.set("emitNotificacion", (tipo, titulo, mensaje, datos = {}) => {
+  const n = { id: Date.now(), tipo, titulo, mensaje, datos, leida: false, created_at: new Date().toISOString() };
+  _notifs.unshift(n);
+  if (_notifs.length > 50) _notifs.pop();
+  io.emit("notificacion", n);
+});
+app.get("/api/notificaciones", (_req, res) => res.json(_notifs.slice(0, 30)));
+app.put("/api/notificaciones/leer", (_req, res) => {
+  _notifs.forEach(n => { n.leida = true; });
+  res.json({ ok: true });
+});
+
 io.on("connection", (socket) => {
   console.log("🟢 Socket conectado:", socket.id);
   socket.on("disconnect", () =>
@@ -62,7 +80,8 @@ app.use("/api", hotelRoutes);
 app.use("/api/huespedes", huespedesRoutes);
 app.use("/api/habitaciones", habitacionesRoutes);
 app.use("/api/reservas", reservasRoutes);
-app.use("/api/servicios-consumidos", serviciosroutes);
+app.use("/api/servicios-consumidos", serviciosConsumidosRoutes);
+app.use("/api/servicios",           serviciosRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/config", configRoutes);
 app.use("/api/pagos", pagosRoutes);
@@ -72,7 +91,9 @@ app.use("/api/cargos", cargosRoutes);
 app.use("/api/auditoria", auditoriaRoutes);
 app.use("/api/tipos-habitacion", tiposHabitacionRoutes);
 app.use("/api/usuarios", usuariosRoutes);
-app.use("/api/otas", otasRoutes);
+app.use("/api/otas",      otasRoutes);
+app.use("/api/reportes", reportesRoutes);
+app.use("/api/tarifas",  tarifasRoutes);
 
 const PORT = process.env.PORT || 4000;
 
@@ -81,4 +102,3 @@ server.listen(PORT, () => {
 });
 
 console.log("CHANNEX_API_KEY length:", (process.env.CHANNEX_API_KEY || "").trim().length);
-

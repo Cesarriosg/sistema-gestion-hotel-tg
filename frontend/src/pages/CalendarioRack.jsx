@@ -1,6 +1,5 @@
 // src/pages/CalendarioRack.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import axios from "axios";
 import FullCalendar from "@fullcalendar/react";
 import resourceTimelinePlugin from "@fullcalendar/resource-timeline";
 import interactionPlugin from "@fullcalendar/interaction";
@@ -10,17 +9,18 @@ import { useNavigate } from "react-router-dom";
 import { Modal, Button, Form, Badge, Nav, Row, Col, Spinner } from "react-bootstrap";
 import {io} from "socket.io-client";
 import "./CalendarioRack.css"
+import reservasService     from "../services/reservasService";
+import pagosService        from "../services/pagosService";
+import habitacionesService from "../services/habitacionesService";
+import bloqueosService     from "../services/bloqueosService";
+import huespedesService    from "../services/huespedesService";
+import hotelService        from "../services/hotelService";
 
 dayjs.locale("es");
 
 const socket = io("http://localhost:4000", { transports: ["websocket"] });
 
-const API = "http://localhost:4000";
 
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
 
 const badgeVariant = (estado) => {
   if (estado === "disponible") return "success";
@@ -92,20 +92,6 @@ export default function CalendarioRack() {
   const [eventoSel, setEventoSel] = useState(null);
   const [showEventModal, setShowEventModal] = useState(false);
 
-  // ── Extender estadía desde rack ──────────────────────────────────────────
-  const [showExtenderModal,  setShowExtenderModal]  = useState(false);
-  const [extenderFechaFin,   setExtenderFechaFin]   = useState("");
-  const [extendiendo,        setExtendiendo]        = useState(false);
-  const [extenderError,      setExtenderError]      = useState("");
-
-  // ── No-show desde rack ────────────────────────────────────────────────────
-  const [showNoShowModal,    setShowNoShowModal]    = useState(false);
-  const [noShowCargando,     setNoShowCargando]     = useState(false);
-  const [noShowError,        setNoShowError]        = useState("");
-
-  // ── PDF registro hotelero desde rack ─────────────────────────────────────
-  const [generandoPdfRack,   setGenerandoPdfRack]   = useState(false);
-
   // editar reserva
   const [showEditModal, setShowEditModal] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
@@ -119,8 +105,15 @@ export default function CalendarioRack() {
   const [editHabitaciones, setEditHabitaciones] = useState([]);
 
 
-  //  Modal cambiar estado habitación
+  // ✅ Modal cambiar estado habitación
   const [showEstadoModal, setShowEstadoModal] = useState(false);
+  // Mini-form depósito en modal de reserva
+  const [showDeposito,   setShowDeposito]   = useState(false);
+  const [depMonto,       setDepMonto]       = useState("");
+  const [depMetodo,      setDepMetodo]      = useState("efectivo");
+  const [depRef,         setDepRef]         = useState("");
+  const [depGuardando,   setDepGuardando]   = useState(false);
+  const [depMsg,         setDepMsg]         = useState("");
   const [habSel, setHabSel] = useState(null); // {dbId, numero, tipo, estado_operativo, estado_base}
   const [nuevoEstado, setNuevoEstado] = useState("");
   const [estadoLoading, setEstadoLoading] = useState(false);
@@ -128,7 +121,7 @@ export default function CalendarioRack() {
 
   const rackLoadingRef = useRef(false);
   const calendarRef = useRef(null);
-  //  FIX: ref para que los closures de socket/visibilitychange siempre lean
+  // ✅ FIX: ref para que los closures de socket/visibilitychange siempre lean
   //         la fecha actualizada, sin importar cuándo se registraron.
   const fechaSistemaRef = useRef(null);
 
@@ -154,10 +147,7 @@ const cargarRackSeguro = async () => {
 
     setEditBuscando(true);
     try {
-      const r = await axios.get(`${API}/api/huespedes/buscar`, {
-        params: { tipo_documento: td, documento: doc },
-        headers: getAuthHeaders(),
-      });
+      const r = await huespedesService.buscar({ tipo_documento: td, documento: doc });
       // Encontrado → autocompletar
       setEditTitular(prev => ({
         ...prev,
@@ -185,7 +175,7 @@ const cargarRackSeguro = async () => {
   };
 
 useEffect(() => {
-  //  FIX: el handler lee fechaSistemaRef en el momento que se ejecuta,
+  // ✅ FIX: el handler lee fechaSistemaRef en el momento que se ejecuta,
   //         no el valor que tenía cuando se registró el listener.
   const handler = () => {
     if (fechaSistemaRef.current) cargarRackSeguro();
@@ -209,14 +199,14 @@ useEffect(() => {
   }, []);
 
 useEffect(() => {
-  //  FIX: mantener ref sincronizado para que socket/visibilitychange lo lean
+  // ✅ FIX: mantener ref sincronizado para que socket/visibilitychange lo lean
   fechaSistemaRef.current = fechaSistema;
   if (fechaSistema) cargarRackSeguro();
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [fechaSistema]);
 
 useEffect(() => {
-  //  FIX: guardar cargarRackSeguro en ref para que visibilitychange
+  // ✅ FIX: guardar cargarRackSeguro en ref para que visibilitychange
   //         siempre use la versión actualizada con fechaSistema correcto.
   const onVis = () => {
     if (document.visibilityState === "visible" && fechaSistemaRef.current) {
@@ -240,9 +230,7 @@ useEffect(()=>{
   const obtenerFechaSistema = async () => {
   try {
     setLoadingFecha(true);
-    const r = await axios.get(`${API}/api/config/fecha-sistema`, {
-      headers: getAuthHeaders(),
-    });
+    const r = await hotelService.fechaSistema();
 
     const f = dayjs(r.data.fecha).format("YYYY-MM-DD");
     setFechaSistema(f);
@@ -256,22 +244,20 @@ useEffect(()=>{
 };
 
   const cargarRack = async () => {
-    //  FIX: leer el ref, no el closure. Así funciona desde socket y visibilitychange.
+    // ✅ FIX: leer el ref, no el closure. Así funciona desde socket y visibilitychange.
     const fechaActual = fechaSistemaRef.current;
     if (!fechaActual) return; // aún no tenemos fecha, no calcular
 
     try {
       const [habsR, reservasR] = await Promise.all([
-        axios.get(`${API}/api/habitaciones`, { headers: getAuthHeaders() }),
-        axios.get(`${API}/api/reservas/calendario`, { headers: getAuthHeaders() }),
+        habitacionesService.listar(),
+        reservasService.calendario(),
       ]);
 
       // bloqueos pueden fallar si no está montado; no rompemos todo
       let bloqueos = [];
       try {
-        const bloqsR = await axios.get(`${API}/api/bloqueos/calendario`, {
-          headers: getAuthHeaders(),
-        });
+        const bloqsR = await bloqueosService.calendario();
         bloqueos = bloqsR.data || [];
       } catch (e) {
         console.warn("No se pudieron cargar bloqueos:", e?.response?.data?.message || e.message);
@@ -281,10 +267,10 @@ useEffect(()=>{
       const habs = habsR.data || [];
       const reservas = reservasR.data || [];
 
-      //  habitaciones con estado_operativo (ZEUS: depende de fechaSistema)
+      // ✅ habitaciones con estado_operativo (ZEUS: depende de fechaSistema)
       const habitaciones = habs.map((h) => {
         const estado_operativo = calcularEstadoOperativo({
-          fechaSistema: fechaActual,   //  usa ref, no el closure
+          fechaSistema: fechaActual,   // ✅ usa ref, no el closure
           roomNumero: h.numero,
           reservas,
           bloqueos,
@@ -295,7 +281,7 @@ useEffect(()=>{
           numero: String(h.numero),
           tipo: h.tipo,
           estado_base: h.estado, // lo guardado en DB (informativo)
-          estado_operativo, //  manda para HOY
+          estado_operativo, // ✅ manda para HOY
         };
       });
 
@@ -359,12 +345,12 @@ useEffect(()=>{
     }
   };
 
-  //  tipos reales (para que el filtro por tipo SI funcione)
+  // ✅ tipos reales (para que el filtro por tipo SI funcione)
   const tiposDisponibles = useMemo(() => {
     return Array.from(new Set((resources || []).map((h) => String(h.tipo)))).sort();
   }, [resources]);
 
-  //  recursos filtrados (Zeus) usando estado_operativo
+  // ✅ recursos filtrados (Zeus) usando estado_operativo
   const resourcesFiltradas = useMemo(() => {
     const q = (fQ || "").trim();
     return (resources || [])
@@ -379,7 +365,7 @@ useEffect(()=>{
         title: `Hab. ${h.numero} — ${h.tipo}`,
         extendedProps: {
           dbId: h.dbId,
-          estado: h.estado_operativo, //  para badge y lógica
+          estado: h.estado_operativo, // ✅ para badge y lógica
           estado_base: h.estado_base,
           tipo: h.tipo,
           numero: h.numero,
@@ -387,7 +373,7 @@ useEffect(()=>{
       }));
   }, [resources, fEstado, fTipo, fQ]);
 
-  //  conteos según estado_operativo (HOY)
+  // ✅ conteos según estado_operativo (HOY)
   const conteos = useMemo(() => {
     const base = resources || [];
     const c = {
@@ -418,7 +404,7 @@ const buildReservaEnd = (fechaFin, startISO) => {
   // checkout 11:00 del día fechaFin
   let endISO = `${dayjs(fechaFin).format("YYYY-MM-DD")}T11:00:00`;
 
-  //  si por datos viene fechaFin == fechaInicio (o end <= start), lo corregimos:
+  // ✅ si por datos viene fechaFin == fechaInicio (o end <= start), lo corregimos:
   if (!dayjs(endISO).isAfter(dayjs(startISO))) {
     endISO = `${dayjs(startISO).add(1, "day").format("YYYY-MM-DD")}T11:00:00`;
   }
@@ -433,7 +419,7 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
   // bloqueos normalmente son [inicio, fin) sin hora, lo dejamos a medianoche
   let endISO = `${dayjs(fechaFin).format("YYYY-MM-DD")}T00:00:00`;
 
-  //  si end == start, al menos 1 día para que se vea
+  // ✅ si end == start, al menos 1 día para que se vea
   if (!dayjs(endISO).isAfter(dayjs(startISO))) {
     endISO = `${dayjs(startISO).add(1, "day").format("YYYY-MM-DD")}T00:00:00`;
   }
@@ -452,7 +438,7 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
     const end = dayjs(arg.end).format("YYYY-MM-DD");
     const habNumero = String(arg.resource.id);
 
-    //  BLOQUEAR selección si la habitación está bloqueada HOY (según estado_operativo)
+    // ✅ BLOQUEAR selección si la habitación está bloqueada HOY (según estado_operativo)
     const h = findHabByNumero(habNumero);
     const est = h?.estado_operativo;
 
@@ -535,6 +521,8 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
   };
 
   const handleCloseEventModal = () => {
+    setShowDeposito(false);
+    setDepMonto(""); setDepMetodo("efectivo"); setDepRef(""); setDepMsg("");
     setShowEventModal(false);
     setEventoSel(null);
   };
@@ -550,9 +538,7 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
 
     try {
       // 1) Datos de la reserva
-      const r = await axios.get(`${API}/api/reservas/${eventoSel.id}`, {
-        headers: getAuthHeaders(),
-      });
+      const r = await reservasService.obtener(eventoSel.id);
       setEditDesde(dayjs(r.data.fecha_inicio).format("YYYY-MM-DD"));
       setEditHasta(dayjs(r.data.fecha_fin).format("YYYY-MM-DD"));
       setEditNotas(r.data.notas || "");
@@ -560,9 +546,7 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
 
       // 2) Datos del titular
       try {
-        const ci = await axios.get(`${API}/api/reservas/${eventoSel.id}/checkin/data`, {
-          headers: getAuthHeaders(),
-        });
+        const ci = await reservasService.datosCheckin(eventoSel.id);
         setEditTitular({
           huesped_id:       ci.data.huesped_id       || null,
           tipo_documento:   ci.data.tipo_documento   || "",
@@ -580,13 +564,7 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
       // 3) Habitaciones disponibles (solo si reservada)
       if (eventoSel.estado === "reservada") {
         try {
-          const dispR = await axios.get(`${API}/api/reservas/disponibles`, {
-            params: {
-              desde: dayjs(r.data.fecha_inicio).format("YYYY-MM-DD"),
-              hasta: dayjs(r.data.fecha_fin).format("YYYY-MM-DD"),
-            },
-            headers: getAuthHeaders(),
-          });
+          const dispR = await reservasService.habitacionesDisp({ desde: dayjs(r.data.fecha_inicio).format("YYYY-MM-DD"), hasta: dayjs(r.data.fecha_fin).format("YYYY-MM-DD") });
           const lista = dispR.data || [];
           const habActual = String(r.data.habitacion_numero || eventoSel.habitacion || "");
           if (!lista.some(h => String(h.numero) === habActual)) {
@@ -622,7 +600,7 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
       return;
     }
 
-    //  Validar titular antes de llamar al backend
+    // ✅ Validar titular antes de llamar al backend
     if (editTitular?.huesped_id && eventoSel.estado !== "finalizada") {
       if (!editTitular.nombres?.trim()) {
         setEditError("El campo 'Nombres' del titular es obligatorio.");
@@ -640,16 +618,12 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
       setEditLoading(true);
 
       // 1) Actualizar reserva: fechas, habitación, notas
-      await axios.put(
-        `${API}/api/reservas/${eventoSel.id}`,
-        {
-          fecha_inicio:      editDesde,
-          fecha_fin:         editHasta,
-          notas:             editNotas?.trim() || null,
-          habitacion_numero: editHabNumero || undefined,
-        },
-        { headers: getAuthHeaders() }
-      );
+      await reservasService.actualizar(eventoSel.id, {
+        fecha_inicio:      editDesde,
+        fecha_fin:         editHasta,
+        notas:             editNotas,
+        habitacion_numero: editHabNumero || undefined,
+      });
 
       // 2) Actualizar titular — si tiene ID actualiza huésped existente,
       //    si no tiene ID pero tiene nombres, crea el huésped y lo vincula
@@ -666,11 +640,7 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
 
         if (editTitular.huesped_id) {
           // Huésped ya existe → actualizar
-          await axios.put(
-            `${API}/api/huespedes/${editTitular.huesped_id}`,
-            body,
-            { headers: getAuthHeaders() }
-          );
+          await huespedesService.actualizar(editTitular.huesped_id, body);
         }
       }
 
@@ -723,9 +693,7 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
     if (!window.confirm("¿Seguro que deseas cancelar esta reserva?")) return;
 
     try {
-      await axios.delete(`${API}/api/reservas/${eventoSel.id}`, {
-        headers: getAuthHeaders(),
-      });
+      await reservasService.cancelar(eventoSel.id, {});
       await cargarRack();
       setShowEventModal(false);
     } catch (e) {
@@ -739,7 +707,7 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
     navigate(`/checkin/${eventoSel.id}`);
   };
 
-  //  Usamos hacerCheckout para que no salga no-unused-vars
+  // ✅ Usamos hacerCheckout para que no salga no-unused-vars
   const hacerCheckout = () => {
     if (!eventoSel || eventoSel.kind !== "reserva") return;
     navigate(`/reservas/${eventoSel.id}`);
@@ -750,11 +718,20 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
     if (eventoSel.kind === "reserva") navigate(`/reservas/${eventoSel.id}`);
   };
 
- /* //  FIX: define irAuditoriaCargos (antes no existía)
-  const irAuditoriaCargos = () => {
-    if (!eventoSel || eventoSel.kind !== "reserva") return;
-    navigate(`/reservas/${eventoSel.id}/auditoria`);
-  };*/
+  const registrarDeposito = async () => {
+    setDepMsg("");
+    const monto = Number(depMonto);
+    if (!monto || monto <= 0) return setDepMsg("El monto debe ser mayor a 0.");
+    setDepGuardando(true);
+    try {
+      await pagosService.registrar({ reserva_id: eventoSel.id, tipo: "deposito", metodo: depMetodo, monto, referencia: depRef.trim() || null });
+      setDepMsg("✓ Depósito registrado correctamente.");
+      setDepMonto(""); setDepRef("");
+      setTimeout(() => { setShowDeposito(false); setDepMsg(""); }, 1800);
+    } catch(e) {
+      setDepMsg(e?.response?.data?.message || "Error al registrar el depósito.");
+    } finally { setDepGuardando(false); }
+  };
 
   // ---- acciones bloqueo ----
   const eliminarBloqueo = async () => {
@@ -762,7 +739,7 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
     if (!window.confirm("¿Eliminar este bloqueo?")) return;
 
     try {
-      await axios.delete(`${API}/api/bloqueos/${eventoSel.id}`, { headers: getAuthHeaders() });
+      await bloqueosService.eliminar(eventoSel.id);
       setShowEventModal(false);
       setEventoSel(null);
       await cargarRack();
@@ -772,7 +749,7 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
   };
 
   // ==========================
-  //  Cambiar estado habitación (manual)
+  // ✅ Cambiar estado habitación (manual)
   // ==========================
   const abrirModalEstado = (resource) => {
     const ep = resource?.extendedProps || {};
@@ -796,11 +773,7 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
       setEstadoLoading(true);
       setEstadoError("");
 
-      await axios.put(
-        `${API}/api/habitaciones/${habSel.dbId}/estado`,
-        { estado: nuevoEstado },
-        { headers: getAuthHeaders() }
-      );
+      await habitacionesService.cambiarEstado(habSel.dbId, { estado: nuevoEstado });
 
       setShowEstadoModal(false);
       setHabSel(null);
@@ -810,85 +783,6 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
       setEstadoError(e?.response?.data?.message || "No se pudo cambiar el estado.");
     } finally {
       setEstadoLoading(false);
-    }
-  };
-
-  // ── Extender estadía ─────────────────────────────────────────────────────
-  const abrirExtenderRack = () => {
-    if (!eventoSel) return;
-    setExtenderFechaFin(dayjs(eventoSel.end).format("YYYY-MM-DD"));
-    setExtenderError("");
-    setShowEventModal(false);
-    setShowExtenderModal(true);
-  };
-
-  const confirmarExtenderRack = async () => {
-    if (!extenderFechaFin || !eventoSel) return;
-    setExtendiendo(true); setExtenderError("");
-    try {
-      await axios.post(
-        `${API}/api/reservas/${eventoSel.id}/extender`,
-        { nueva_fecha_fin: extenderFechaFin, usuario: "recepcion" },
-        { headers: getAuthHeaders() }
-      );
-      setShowExtenderModal(false);
-      await cargarRack();
-    } catch (e) {
-      setExtenderError(e?.response?.data?.message || "No se pudo extender la estadía.");
-    } finally {
-      setExtendiendo(false);
-    }
-  };
-
-  // ── No-show ───────────────────────────────────────────────────────────────
-  const abrirNoShowRack = () => {
-    if (!eventoSel) return;
-    setNoShowError("");
-    setShowEventModal(false);
-    setShowNoShowModal(true);
-  };
-
-  const confirmarNoShow = async () => {
-    if (!eventoSel) return;
-    setNoShowCargando(true); setNoShowError("");
-    try {
-      await axios.post(
-        `${API}/api/reservas/${eventoSel.id}/no-show`,
-        {},
-        { headers: getAuthHeaders() }
-      );
-      setShowNoShowModal(false);
-      await cargarRack();
-    } catch (e) {
-      setNoShowError(e?.response?.data?.message || "No se pudo marcar como no-show.");
-    } finally {
-      setNoShowCargando(false);
-    }
-  };
-
-  // ── PDF registro hotelero ─────────────────────────────────────────────────
-  const descargarRegistroRack = async () => {
-    if (!eventoSel) return;
-    setGenerandoPdfRack(true);
-    try {
-      const response = await axios.get(
-        `${API}/api/reservas/${eventoSel.id}/registro-hotelero`,
-        { headers: getAuthHeaders(), responseType: "blob" }
-      );
-      const url  = window.URL.createObjectURL(
-        new Blob([response.data], { type: "application/pdf" })
-      );
-      const link = document.createElement("a");
-      link.href  = url;
-      link.setAttribute("download", `registro_hotelero_reserva_${eventoSel.id}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch {
-      alert("No se pudo generar el registro hotelero.");
-    } finally {
-      setGenerandoPdfRack(false);
     }
   };
 
@@ -910,7 +804,7 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
         </div>
       </div>
 
-      {/*  mini dashboard conteos (HOY) */}
+      {/* ✅ mini dashboard conteos (HOY) */}
       <div className="d-flex gap-2 flex-wrap mb-2">
         <Badge bg="dark">Total: {conteos.total}</Badge>
         <Badge bg="success">Disponibles: {conteos.disponible}</Badge>
@@ -922,7 +816,7 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
         <Badge bg="secondary">Fuera servicio: {conteos.fuera_servicio}</Badge>
       </div>
 
-      {/*  filtros tipo Zeus */}
+      {/* ✅ filtros tipo Zeus */}
       <div className="card shadow-sm mb-2">
         <div className="card-body py-2">
           <div className="row g-2 align-items-end">
@@ -1281,7 +1175,7 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
                         </Col>
                         {editTitular.huesped_id && (
                           <Col md={12}>
-                            <small className="text-success"> Huésped encontrado — datos cargados.</small>
+                            <small className="text-success">✅ Huésped encontrado — datos cargados.</small>
                           </Col>
                         )}
 
@@ -1412,6 +1306,56 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
                 )}
 
                 {eventoSel?.estado === "reservada" && (
+                  <Button
+                    variant="outline-success" size="sm"
+                    onClick={() => { setShowDeposito(d => !d); setDepMsg(""); }}
+                  >
+                    {showDeposito ? "Cancelar depósito" : "Aplicar depósito"}
+                  </Button>
+                )}
+
+                {showDeposito && eventoSel?.estado === "reservada" && (
+                  <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 8, padding: 12, marginTop: 4 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: "#15803d" }}>Registrar depósito</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <input
+                          type="number" min="1" placeholder="Monto"
+                          value={depMonto} onChange={e => setDepMonto(e.target.value)}
+                          style={{ flex: 1, border: "1px solid #d1fae5", borderRadius: 6, padding: "5px 8px", fontSize: 13 }}
+                        />
+                        <select
+                          value={depMetodo} onChange={e => setDepMetodo(e.target.value)}
+                          style={{ border: "1px solid #d1fae5", borderRadius: 6, padding: "5px 8px", fontSize: 13 }}
+                        >
+                          <option value="efectivo">Efectivo</option>
+                          <option value="transferencia">Transferencia</option>
+                          <option value="tarjeta">Tarjeta</option>
+                          <option value="nequi">Nequi</option>
+                          <option value="daviplata">Daviplata</option>
+                        </select>
+                      </div>
+                      <input
+                        type="text" placeholder="Referencia (opcional)"
+                        value={depRef} onChange={e => setDepRef(e.target.value)}
+                        style={{ border: "1px solid #d1fae5", borderRadius: 6, padding: "5px 8px", fontSize: 13 }}
+                      />
+                      <button
+                        onClick={registrarDeposito} disabled={depGuardando || !depMonto}
+                        style={{ background: "#16a34a", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: depGuardando ? 0.7 : 1 }}
+                      >
+                        {depGuardando ? "Guardando..." : "Confirmar depósito"}
+                      </button>
+                      {depMsg && (
+                        <div style={{ fontSize: 12, color: depMsg.startsWith("✓") ? "#15803d" : "#dc2626", fontWeight: 500 }}>
+                          {depMsg}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {eventoSel?.estado === "reservada" && (
                   <Button variant="outline-primary" size="sm" disabled={!puedeCheckIn} onClick={irCheckIn}>
                     Check-In
                   </Button>
@@ -1423,7 +1367,7 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
                    </Button>
                 )}
 
-                {/*  usamos hacerCheckout para que no salga el warning */}
+                {/* ✅ usamos hacerCheckout para que no salga el warning */}
                 {eventoSel?.estado === "ocupada" && (
                   <Button variant="outline-success" size="sm" disabled={!puedeCheckout} onClick={hacerCheckout}>
                     Ir a check-out / facturar
@@ -1433,32 +1377,6 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
                 <Button variant="outline-danger" size="sm" onClick={cancelarReserva} disabled={!puedeCancelar}>
                   Cancelar reserva
                 </Button>
-
-                {/*  No-show: solo si está reservada y es hoy o pasada */}
-                {eventoSel?.estado === "reservada" && (
-                  <Button variant="outline-secondary" size="sm" onClick={abrirNoShowRack}>
-                    🚫 Marcar no-show
-                  </Button>
-                )}
-
-                {/*  Extender estadía: solo si está ocupada */}
-                {eventoSel?.estado === "ocupada" && (
-                  <Button variant="outline-success" size="sm" onClick={abrirExtenderRack}>
-                    📅+ Extender estadía
-                  </Button>
-                )}
-
-                {/*  Registro hotelero PDF: solo si está ocupada */}
-                {eventoSel?.estado === "ocupada" && (
-                  <Button
-                    variant="outline-dark"
-                    size="sm"
-                    onClick={descargarRegistroRack}
-                    disabled={generandoPdfRack}
-                  >
-                    {generandoPdfRack ? "Generando PDF..." : "🖨️ Registro hotelero"}
-                  </Button>
-                )}
               </div>
 
               {eventoSel?.estado === "reservada" && !puedeCheckIn && (
@@ -1483,77 +1401,7 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
         </Modal.Footer>
       </Modal>
 
-      {/* ══ MODAL EXTENDER ESTADÍA (RACK) ════════════════════════════════ */}
-      <Modal show={showExtenderModal} onHide={() => setShowExtenderModal(false)} centered>
-        <Modal.Header closeButton>
-          <Modal.Title>📅 Extender estadía — Reserva #{eventoSel?.id}</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <div className="mb-3" style={{ fontSize: 14 }}>
-            <div><b>Habitación:</b> {eventoSel?.habitacion}</div>
-            <div><b>Salida actual:</b> {eventoSel?.end}</div>
-          </div>
-          <div className="mb-2">
-            <Form.Label>Nueva fecha de salida</Form.Label>
-            <Form.Control
-              type="date"
-              value={extenderFechaFin}
-              min={dayjs(eventoSel?.end).add(1, "day").format("YYYY-MM-DD")}
-              onChange={e => setExtenderFechaFin(e.target.value)}
-            />
-            <div className="form-text text-muted">
-              Debe ser posterior a la salida actual. Se generará un cargo adicional automáticamente.
-            </div>
-          </div>
-          {extenderError && (
-            <div className="alert alert-danger py-2 mt-2 mb-0" style={{ fontSize: 13 }}>
-              {extenderError}
-            </div>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="outline-secondary" onClick={() => setShowExtenderModal(false)} disabled={extendiendo}>
-            Cancelar
-          </Button>
-          <Button variant="success" onClick={confirmarExtenderRack} disabled={extendiendo || !extenderFechaFin}>
-            {extendiendo
-              ? <><Spinner animation="border" size="sm" className="me-2" />Extendiendo...</>
-              : "Confirmar extensión"}
-          </Button>
-        </Modal.Footer>
-      </Modal>
-
-      {/* ══ MODAL NO-SHOW (RACK) ════════════════════════════════════════════ */}
-      <Modal show={showNoShowModal} onHide={() => setShowNoShowModal(false)} centered>
-        <Modal.Header closeButton>
-          <Modal.Title>🚫 Marcar no-show — Reserva #{eventoSel?.id}</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <p>
-            ¿Confirmar que el huésped <b>{eventoSel?.titulo}</b> no se presentó?
-          </p>
-          <p className="text-muted" style={{ fontSize: 13 }}>
-            La reserva quedará en estado <b>no-show</b> y la habitación volverá a estar disponible.
-          </p>
-          {noShowError && (
-            <div className="alert alert-danger py-2 mb-0" style={{ fontSize: 13 }}>
-              {noShowError}
-            </div>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="outline-secondary" onClick={() => setShowNoShowModal(false)} disabled={noShowCargando}>
-            Cancelar
-          </Button>
-          <Button variant="danger" onClick={confirmarNoShow} disabled={noShowCargando}>
-            {noShowCargando
-              ? <><Spinner animation="border" size="sm" className="me-2" />Procesando...</>
-              : "Confirmar no-show"}
-          </Button>
-        </Modal.Footer>
-      </Modal>
-
-      {/*  Modal cambiar estado habitación */}
+      {/* ✅ Modal cambiar estado habitación */}
       <Modal show={showEstadoModal} onHide={() => setShowEstadoModal(false)} centered>
         <Modal.Header closeButton>
           <Modal.Title>Cambiar estado de habitación</Modal.Title>

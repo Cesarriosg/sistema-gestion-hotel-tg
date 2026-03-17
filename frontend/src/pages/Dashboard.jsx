@@ -1,16 +1,11 @@
 // src/pages/Dashboard.jsx
 import { useEffect, useState, useCallback } from "react";
-import axios from "axios";
 import dayjs from "dayjs";
 import { Card, Row, Col, Badge, Spinner, Button, Alert, ProgressBar } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
+import hotelService from "../services/hotelService";
 
-const API = "http://localhost:4000";
 
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
 
 const money = (v) =>
   Number(v || 0).toLocaleString("es-CO", {
@@ -56,10 +51,7 @@ export default function Dashboard() {
     setCargando(true);
     setError("");
     try {
-      const { data: d } = await axios.get(`${API}/api/dashboard`, {
-        headers: getAuthHeaders(),
-        timeout: 8000,
-      });
+      const { data: d } = await hotelService.dashboard();
       setData(d);
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || "No se pudo conectar con el servidor.";

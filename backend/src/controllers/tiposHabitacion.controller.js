@@ -120,7 +120,7 @@ export const cambiarEstadoTipoHabitacion = async (req, res) => {
 
   try {
     if (!nuevoActivo) {
-      //  trae nombre del tipo
+      // ✅ trae nombre del tipo
       const t = await pool.query(
         `SELECT nombre FROM tipos_habitacion WHERE id = $1 LIMIT 1`,
         [id]
@@ -129,8 +129,8 @@ export const cambiarEstadoTipoHabitacion = async (req, res) => {
 
       const nombreTipo = t.rows[0].nombre;
 
-      //  ojo: tu tabla es habitaciones (plural)
-      const used = await pool.query(
+      // ✅ ojo: tu tabla es habitaciones (plural)
+        const used = await pool.query(
         `
         SELECT 1
         FROM habitaciones

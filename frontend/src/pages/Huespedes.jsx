@@ -1,17 +1,13 @@
+// src/pages/Huespedes.jsx
 
 import { useEffect, useState, useCallback } from "react";
-import axios from "axios";
 import dayjs from "dayjs";
+import huespedesService from "../services/huespedesService";
 import {
   Card, Table, Row, Col, Form, Button, Spinner,
   Alert, Badge, Modal, Nav,
 } from "react-bootstrap";
 
-const API = "http://localhost:4000";
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
 
 const TIPOS_DOC = ["CC","CE","PA","TI","NIT"];
 
@@ -42,7 +38,7 @@ const FORM_VACIO = {
 };
 
 export default function Huespedes() {
-  // Lista  
+  // ── Lista ──────────────────────────────────────────────────────────────────
   const [q,         setQ]         = useState("");
   const [page,      setPage]      = useState(1);
   const limit = 20;
@@ -51,7 +47,7 @@ export default function Huespedes() {
   const [cargando,  setCargando]  = useState(false);
   const [error,     setError]     = useState("");
 
-  // Modal  
+  // ── Modal ──────────────────────────────────────────────────────────────────
   const [showModal,   setShowModal]   = useState(false);
   const [modo,        setModo]        = useState("ver");   // "ver" | "editar" | "nuevo"
   const [tabActiva,   setTabActiva]   = useState("datos");
@@ -63,18 +59,16 @@ export default function Huespedes() {
   const [errorModal,  setErrorModal]  = useState("");
   const [okModal,     setOkModal]     = useState("");
 
-    
+  // ─────────────────────────────────────────────────────────────────────────
   // Cargar lista
-    
+  // ─────────────────────────────────────────────────────────────────────────
   const cargar = useCallback(async (opts = {}) => {
     try {
       setCargando(true); setError("");
       const p  = opts.page !== undefined ? opts.page : page;
       const qq = opts.q    !== undefined ? opts.q    : q;
-      const r  = await axios.get(`${API}/api/huespedes`, {
-        params: { q: qq, page: p, limit },
-        headers: getAuthHeaders(),
-      });
+      const params = { q: qq, page: p, limit };
+      const r  = await huespedesService.listar(params);
       setItems(r.data.items || []);
       setTotal(Number(r.data.total || 0));
       setPage(Number(r.data.page || p));
@@ -91,22 +85,21 @@ export default function Huespedes() {
   const limpiar = () => { setQ(""); cargar({ q:"", page:1 }); };
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
-    
+  // ─────────────────────────────────────────────────────────────────────────
   // Cargar estadías de un huésped
-    
+  // ─────────────────────────────────────────────────────────────────────────
   const cargarEstadias = async (id) => {
     setCargandoEst(true);
     try {
-      const { data } = await axios.get(
-        `${API}/api/huespedes/${id}/estadias`, { headers: getAuthHeaders() });
+      const { data } = await huespedesService.estadias(id);
       setEstadias(data || []);
     } catch { setEstadias([]); }
     finally { setCargandoEst(false); }
   };
 
-    
+  // ─────────────────────────────────────────────────────────────────────────
   // Abrir modal VER
-    
+  // ─────────────────────────────────────────────────────────────────────────
   const abrirVer = (h) => {
     setHuespedSel(h);
     setForm({
@@ -130,9 +123,9 @@ export default function Huespedes() {
     cargarEstadias(h.id);
   };
 
-    
+  // ─────────────────────────────────────────────────────────────────────────
   // Abrir modal NUEVO
-    
+  // ─────────────────────────────────────────────────────────────────────────
   const abrirNuevo = () => {
     setHuespedSel(null);
     setForm(FORM_VACIO);
@@ -150,9 +143,9 @@ export default function Huespedes() {
 
   const handleForm = (campo, valor) => setForm(p => ({ ...p, [campo]: valor }));
 
-    
+  // ─────────────────────────────────────────────────────────────────────────
   // Guardar
-    
+  // ─────────────────────────────────────────────────────────────────────────
   const guardar = async () => {
     setErrorModal(""); setOkModal("");
     if (!form.nombres.trim()) { setErrorModal("Nombres es obligatorio."); return; }
@@ -161,13 +154,12 @@ export default function Huespedes() {
     setGuardando(true);
     try {
       if (modo === "nuevo") {
-        await axios.post(`${API}/api/huespedes`, form, { headers: getAuthHeaders() });
+        await huespedesService.crear(form);
         setOkModal("Huésped creado correctamente.");
         await cargar({ page:1 });
         setTimeout(cerrarModal, 1200);
       } else {
-        await axios.put(
-          `${API}/api/huespedes/${huespedSel.id}`, form, { headers: getAuthHeaders() });
+        await huespedesService.actualizar(huespedSel.id, form);
         setOkModal("Datos actualizados correctamente.");
         setModo("ver");
         await cargar({ page });
@@ -181,15 +173,15 @@ export default function Huespedes() {
 
   const esEditable = modo === "editar" || modo === "nuevo";
 
-    
+  // ─────────────────────────────────────────────────────────────────────────
   // Render
-    
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <div style={{ maxWidth:1200, margin:"0 auto", paddingTop:14, paddingBottom:24 }}>
       <Card className="shadow-sm">
         <Card.Body>
 
-          {/* ── Cabecera   ─────────── */}
+          {/* ── Cabecera ──────────────────────────────────────── */}
           <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <div>
               <h3 className="mb-0">Registro de Huéspedes</h3>
@@ -204,7 +196,7 @@ export default function Huespedes() {
 
           {error && <Alert variant="danger" className="py-2">{error}</Alert>}
 
-          {/* ── Filtros   ──────────── */}
+          {/* ── Filtros ───────────────────────────────────────── */}
           <Row className="g-2 align-items-end mb-3">
             <Col md={7}>
               <Form.Label className="mb-1" style={{ fontSize:13 }}>
@@ -227,7 +219,7 @@ export default function Huespedes() {
             </Col>
           </Row>
 
-          {/* ── Tabla   ────────────── */}
+          {/* ── Tabla ─────────────────────────────────────────── */}
           {cargando ? (
             <div className="d-flex justify-content-center py-4"><Spinner animation="border" /></div>
           ) : items.length === 0 ? (
@@ -282,7 +274,7 @@ export default function Huespedes() {
             </div>
           )}
 
-          {/* ── Paginación   ───────── */}
+          {/* ── Paginación ────────────────────────────────────── */}
           <div className="d-flex justify-content-between align-items-center">
             <div className="text-muted" style={{ fontSize:13 }}>
               Página {page} de {totalPages} — {total} resultados

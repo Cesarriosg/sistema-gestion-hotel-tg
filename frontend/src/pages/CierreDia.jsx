@@ -1,15 +1,10 @@
 // src/pages/CierreDia.jsx
-//  Cierre de día: auditoría nocturna + avance de fecha operativa
+// ✅ Cierre de día: auditoría nocturna + avance de fecha operativa
 import { useEffect, useState } from "react";
-import axios from "axios";
 import dayjs from "dayjs";
 import { Card, Table, Button, Badge, Alert, Spinner, Row, Col, Modal } from "react-bootstrap";
+import hotelService from "../services/hotelService";
 
-const API = "http://localhost:4000";
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
 
 const money = (v) =>
   Number(v).toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
@@ -17,7 +12,7 @@ const money = (v) =>
 const estadoColor = (e) =>
   ({ generado: "success", saltado: "warning", error: "danger" }[e] || "secondary");
 const estadoLabel = (e) =>
-  ({ generado: " Generado", saltado: "⏭️ Ya existía", error: "❌ Error" }[e] || e);
+  ({ generado: "✅ Generado", saltado: "⏭️ Ya existía", error: "❌ Error" }[e] || e);
 
 export default function CierreDia() {
   const [fechaOp,   setFechaOp]   = useState("");
@@ -35,7 +30,7 @@ export default function CierreDia() {
   // ── Cargar fecha operativa ──────────────────────────────────────────────
   const cargarFecha = async () => {
     try {
-      const { data } = await axios.get(`${API}/api/config/fecha-sistema`, { headers: getAuthHeaders() });
+      const { data } = await hotelService.fechaSistema();
       setFechaOp(data.fecha || dayjs().format("YYYY-MM-DD"));
     } catch { setFechaOp(dayjs().format("YYYY-MM-DD")); }
     finally { setCargando(false); }
@@ -47,9 +42,7 @@ export default function CierreDia() {
   const cargarPreview = async () => {
     setCargandoPreview(true); setErrPreview(""); setPreview(null);
     try {
-      const { data } = await axios.get(`${API}/api/auditoria/preview-alojamiento`, {
-        headers: getAuthHeaders(),
-      });
+      const { data } = await hotelService.fechaSistema();
       setPreview(data);
     } catch (e) {
       setErrPreview(e?.response?.data?.message || "No se pudo cargar el preview.");
@@ -66,10 +59,7 @@ export default function CierreDia() {
   const ejecutarCierre = async () => {
     setEjecutando(true); setErrCierre(""); setResultado(null);
     try {
-      const { data } = await axios.post(
-        `${API}/api/auditoria/cierre-dia`, {},
-        { headers: getAuthHeaders() }
-      );
+      const { data } = await hotelService.ejecutarCierreDia();
       setResultado(data);
       setShowConfirm(false);
       await cargarFecha();
@@ -97,7 +87,7 @@ export default function CierreDia() {
         <Card.Body>
           <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
             <div>
-              <h3 className="mb-1">Cierre de Día</h3>
+              <h3 className="mb-1">🌙 Cierre de Día</h3>
               <p className="text-muted mb-0" style={{ fontSize: 13 }}>
                 Genera los cargos de alojamiento del día operativo y avanza la fecha del sistema.
               </p>
@@ -116,7 +106,7 @@ export default function CierreDia() {
       {resultado && (
         <Card className="shadow-sm mb-4 border-success">
           <Card.Body>
-            <h5 className="text-success mb-3"> Cierre ejecutado correctamente</h5>
+            <h5 className="text-success mb-3">✅ Cierre ejecutado correctamente</h5>
             <Row className="g-3 mb-3">
               <Col md={3}>
                 <div className="p-3 rounded" style={{ background: "#f0fdf4" }}>
@@ -267,7 +257,7 @@ export default function CierreDia() {
       {/* ── Botón ejecutar cierre ─────────────────────────────────────────── */}
       <Card className="shadow-sm border-warning">
         <Card.Body>
-          <h5 className="mb-1"> Ejecutar Cierre de Día</h5>
+          <h5 className="mb-1">⚡ Ejecutar Cierre de Día</h5>
           <p className="text-muted mb-3" style={{ fontSize: 13 }}>
             Al ejecutar el cierre, se generarán los cargos de alojamiento para todas las habitaciones
             ocupadas y la fecha operativa avanzará automáticamente al día siguiente.
@@ -281,7 +271,7 @@ export default function CierreDia() {
           >
             {ejecutando
               ? <><Spinner animation="border" size="sm" className="me-2" />Ejecutando cierre...</>
-              : `Ejecutar cierre del día ${dayjs(fechaOp).format("DD/MM/YYYY")}`}
+              : `🌙 Ejecutar cierre del día ${dayjs(fechaOp).format("DD/MM/YYYY")}`}
           </Button>
         </Card.Body>
       </Card>
@@ -289,7 +279,7 @@ export default function CierreDia() {
       {/* ══ MODAL CONFIRMACIÓN ════════════════════════════════════════════════ */}
       <Modal show={showConfirm} onHide={() => setShowConfirm(false)} centered>
         <Modal.Header closeButton>
-          <Modal.Title>Confirmar cierre de día</Modal.Title>
+          <Modal.Title>🌙 Confirmar cierre de día</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <p>Vas a ejecutar el cierre del día operativo <strong>{dayjs(fechaOp).format("DD/MM/YYYY")}</strong>.</p>

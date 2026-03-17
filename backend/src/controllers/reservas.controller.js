@@ -1,4 +1,4 @@
-
+// src/controllers/reservas.controller.js
 import { pool } from "../config/database.js";
 import dayjs from "dayjs";
 import { generarCargoAlojamientoReserva } from "./cargos.controller.js";
@@ -24,7 +24,19 @@ const rangoChoca = async (client, habitacionId, desde, hasta) => {
  * GET /api/reservas
  * Lista general de reservas (para pantallas tipo listado).
  */
-
+/**
+ * GET /api/reservas
+ * HU-R7: Filtrar reservas por fecha, huésped o estado
+ *
+ * Query params opcionales:
+ *   ?q=texto        → busca en nombre huésped, número habitación, id
+ *   ?estado=        → reservada | ocupada | finalizada | cancelada
+ *   ?desde=         → YYYY-MM-DD  (fecha_inicio >= desde)
+ *   ?hasta=         → YYYY-MM-DD  (fecha_inicio <= hasta)
+ *
+ * INSTRUCCIÓN: Reemplaza la función listarReservas existente
+ * en src/controllers/reservas.controller.js por esta versión.
+ */
 export const listarReservas = async (req, res) => {
   try {
     const { q = "", estado = "", desde = "", hasta = "" } = req.query;
@@ -200,7 +212,7 @@ export const crearReservaOWalkIn = async (req, res) => {
     fecha_inicio,
     fecha_fin,
 
-    //  Titular (ya lo envías así)
+    // ✅ Titular (ya lo envías así)
     huesped_nombre,
     huesped_documento = null,
     huesped_telefono = null,
@@ -240,7 +252,7 @@ export const crearReservaOWalkIn = async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    //  Habitación
+    // ✅ Habitación
     const hq = await client.query(
       "SELECT id, estado, tipo FROM habitaciones WHERE numero = $1 LIMIT 1",
       [habitacion_numero]
@@ -271,7 +283,7 @@ export const crearReservaOWalkIn = async (req, res) => {
       return res.status(409).json({ message: "La habitación ya tiene una reserva u ocupación en ese rango." });
     }
 
-    //  Estado inicial
+    // ✅ Estado inicial
     let estadoReserva = "reservada";
     let checkin_at = null;
 
@@ -290,7 +302,7 @@ export const crearReservaOWalkIn = async (req, res) => {
       checkin_at = dayjs().toDate();
     }
 
-    //  Snapshot tarifa (igual que antes)
+    // ✅ Snapshot tarifa (igual que antes)
     let snapshotFinal = tarifa_snapshot;
     if (!snapshotFinal) {
       snapshotFinal = await calcularTarifaSnapshot(client, {
@@ -308,9 +320,9 @@ export const crearReservaOWalkIn = async (req, res) => {
       }
     }
 
-    
-    //  1) Titular: buscar/crear huésped
-    
+    // ============================
+    // ✅ 1) Titular: buscar/crear huésped
+    // ============================
     let titularId = null;
 
     // nombre “completo” preferido:
@@ -345,7 +357,7 @@ export const crearReservaOWalkIn = async (req, res) => {
       );
       titularId = ins.rows[0].id;
     } else {
-      //  si ya existe, actualiza campos básicos si llegan
+      // ✅ si ya existe, actualiza campos básicos si llegan
       await client.query(
         `UPDATE huespedes
          SET nombre = COALESCE(NULLIF($1,''), nombre),
@@ -368,9 +380,9 @@ export const crearReservaOWalkIn = async (req, res) => {
       );
     }
 
-    
-    //  2) Crear reserva
-    
+    // ============================
+    // ✅ 2) Crear reserva
+    // ============================
     const insR = await client.query(
       `INSERT INTO reservas
         (fecha_inicio, fecha_fin, estado, notas,
@@ -381,9 +393,9 @@ export const crearReservaOWalkIn = async (req, res) => {
     );
     const reservaId = insR.rows[0].id;
 
-    
-    //  3) Insertar pivote: titular
-    
+    // ============================
+    // ✅ 3) Insertar pivote: titular
+    // ============================
     await client.query(
       `INSERT INTO reserva_huespedes (reserva_id, huesped_id, rol)
        VALUES ($1,$2,'titular')
@@ -391,9 +403,9 @@ export const crearReservaOWalkIn = async (req, res) => {
       [reservaId, titularId]
     );
 
-    
-    //  4) Insertar pivote: acompañantes
-    
+    // ============================
+    // ✅ 4) Insertar pivote: acompañantes
+    // ============================
     if (Array.isArray(acompanantes) && acompanantes.length > 0) {
       for (const a of acompanantes) {
         const td = (a?.tipo_documento || "").trim().toUpperCase();
@@ -461,14 +473,14 @@ export const crearReservaOWalkIn = async (req, res) => {
       }
     }
 
-    //  Estado habitación coherente
+    // ✅ Estado habitación coherente
     const nuevoEstadoHabitacion = tipo === "walkin" ? "ocupada" : "reservada";
     await client.query(
       `UPDATE habitaciones SET estado = $1, updated_at = NOW() WHERE id = $2`,
       [nuevoEstadoHabitacion, habitacionId]
     );
 
-    //  historial creación
+    // HU-R11: historial creación
     await client.query(
       `INSERT INTO reservas_historial (reserva_id, usuario, accion, notas)
        VALUES ($1, $2, 'created', $3)`,
@@ -505,6 +517,7 @@ export const actualizarReserva = async (req, res) => {
     estado,
     notas,
     habitacion_numero,
+    plan,
     fuente,
     usuario = "recepcion",
   } = req.body;
@@ -611,14 +624,15 @@ export const actualizarReserva = async (req, res) => {
           fecha_fin     = $3,
           estado        = COALESCE($4, estado),
           notas         = COALESCE($5, notas),
+          plan          = COALESCE($7, plan),
           updated_at    = NOW()
       WHERE id = $6
       RETURNING *
       `,
-      [nuevaHabitacionId, nuevoDesde, nuevoHasta, estado, notas, reservaId]
+      [nuevaHabitacionId, nuevoDesde, nuevoHasta, estado, notas, reservaId, plan || null]
     );
 
-    //  guardar fuente si viene
+    // HU-R15: guardar fuente si viene
     if (fuente) {
       await client.query(
         `UPDATE reservas SET fuente = $1 WHERE id = $2`,
@@ -626,7 +640,7 @@ export const actualizarReserva = async (req, res) => {
       );
     }
 
-    //  historial de cambios
+    // HU-R11: historial de cambios
     const cambiosList = [];
     if (nuevoDesde !== dayjs(actual.fecha_inicio).format("YYYY-MM-DD"))
       cambiosList.push(`fecha_inicio: ${dayjs(actual.fecha_inicio).format("YYYY-MM-DD")} → ${nuevoDesde}`);
@@ -685,7 +699,7 @@ export const cancelarReserva = async (req, res) => {
       [id]
     );
 
-    //  Si estaba reservada (sin ocupar), la habitación vuelve a disponible
+    // ✅ Si estaba reservada (sin ocupar), la habitación vuelve a disponible
     if (reserva.estado === "reservada") {
       await client.query(
         `UPDATE habitaciones
@@ -858,7 +872,7 @@ export const checkinReserva = async (req, res) => {
       });
     }
 
-    //  1) Upsert TITULAR -> huespedIdReal
+    // ✅ 1) Upsert TITULAR -> huespedIdReal
     const titularId = await upsertHuesped({
       tipo_documento,
       documento,
@@ -869,7 +883,7 @@ export const checkinReserva = async (req, res) => {
       email: titular?.email,
     });
 
-    //  2) Reserva ocupada + huesped_id = titular
+    // ✅ 2) Reserva ocupada + huesped_id = titular
     const updReserva = await client.query(
       `UPDATE reservas
        SET estado = 'ocupada',
@@ -881,7 +895,7 @@ export const checkinReserva = async (req, res) => {
       [titularId, id]
     );
 
-    //  habitación ocupada
+    // ✅ habitación ocupada
     await client.query(
       `UPDATE habitaciones
        SET estado = 'ocupada', updated_at = NOW()
@@ -889,6 +903,8 @@ export const checkinReserva = async (req, res) => {
       [reserva.habitacion_id]
     );
 
+    // ✅ 3) SINCRONIZAR pivote (HU-RH6)
+    // Limpia asociaciones previas (por si repiten checkin o edición)
     await client.query(`DELETE FROM reserva_huespedes WHERE reserva_id = $1`, [id]);
 
     // Inserta titular
@@ -1046,7 +1062,7 @@ export const checkoutReserva = async (req, res) => {
       [reservaId]
     );
 
-    //  liberar habitación al finalizar
+    // ✅ liberar habitación al finalizar
     await client.query(
       `UPDATE habitaciones
        SET estado = 'disponible', updated_at = NOW()
@@ -1071,7 +1087,7 @@ export const checkoutReserva = async (req, res) => {
 export const obtenerDatosCheckIn = async (req, res) => {
   const { id } = req.params;
   try {
-    //  FIX: busca el titular en reserva_huespedes (sistema nuevo) Y en
+    // ✅ FIX: busca el titular en reserva_huespedes (sistema nuevo) Y en
     //         reservas.huesped_id (sistema legado). Usa COALESCE para tomar
     //         el que exista.
     const q = `
@@ -1260,7 +1276,7 @@ export const obtenerFinanzasReserva = async (req, res) => {
       detalles = rDet.rows || [];
     }
 
-    //  total_facturado: si hay factura, manda factura.total, si no, usa total_cargos (modo Zeus)
+    // ✅ total_facturado: si hay factura, manda factura.total, si no, usa total_cargos (modo Zeus)
     const total_facturado = factura ? Number(factura.total || 0) : Number(total_cargos || 0);
 
     const saldo = Number(total_facturado || 0) - Number(total_pagado || 0);
@@ -1504,9 +1520,9 @@ export const listarHabitacionesDisponibles = async (req, res) => {
       SELECT h.id, h.numero, h.tipo, h.estado
       FROM habitaciones h
       WHERE ($3::text IS NULL OR lower(trim(h.tipo)) = lower(trim($3)))
-        --  SOLO bloqueamos si NO es operable
+        -- ✅ SOLO bloqueamos si NO es operable
         AND h.estado NOT IN ('mantenimiento', 'fuera_servicio')
-        --  la disponibilidad real la decide el choque de reservas
+        -- ✅ la disponibilidad real la decide el choque de reservas
         AND NOT EXISTS (
           SELECT 1
           FROM reservas r
@@ -1568,7 +1584,7 @@ export const previsualizarPrecioReserva = async (req, res) => {
   return res.json({ noches, precio_noche: precioNoche, total });
 };
 
-//  helper: arma snapshot desde tabla tarifas
+// ✅ helper: arma snapshot desde tabla tarifas
 const calcularTarifaSnapshot = async (client, { plan, tipoHabitacion, desde, hasta }) => {
   const d = dayjs(desde).format("YYYY-MM-DD");
   const h = dayjs(hasta).format("YYYY-MM-DD");
@@ -1638,7 +1654,7 @@ export const listarHuespedesDeReserva = async (req, res) => {
   }
 };
 
-//  GET: listar huéspedes asociados (titular + acompañantes)
+// ✅ GET: listar huéspedes asociados (titular + acompañantes)
 export const obtenerHuespedesAsociadosReserva = async (req, res) => {
   const { id } = req.params;
   if (isNaN(id)) return res.status(400).json({ message: "ID inválido." });
@@ -1673,7 +1689,7 @@ export const obtenerHuespedesAsociadosReserva = async (req, res) => {
   }
 };
 
-//  PUT: sincronizar acompañantes (NO cambia titular ni reserva.huesped_id)
+// ✅ PUT: sincronizar acompañantes (NO cambia titular ni reserva.huesped_id)
 export const actualizarAcompanantesReserva = async (req, res) => {
   const { id } = req.params;
   const { acompanantes = [] } = req.body || {};
@@ -1849,10 +1865,10 @@ export const actualizarAcompanantesReserva = async (req, res) => {
   }
 };
 
-
-//  Lista de llegadas del día
+// ============================================================
+// HU-R13: Lista de llegadas del día
 // GET /api/reservas/llegadas?fecha=YYYY-MM-DD
-
+// ============================================================
 export const listarLlegadasDelDia = async (req, res) => {
   try {
     const cfg = await pool.query("SELECT fecha_sistema FROM configuracion LIMIT 1");
@@ -1900,10 +1916,10 @@ export const listarLlegadasDelDia = async (req, res) => {
   }
 };
 
-
-//  Marcar no-show
+// ============================================================
+// HU-R14: Marcar no-show
 // POST /api/reservas/:id/no-show
-
+// ============================================================
 export const marcarNoShow = async (req, res) => {
   const { id } = req.params;
   const { usuario = "recepcion" } = req.body;
@@ -1949,9 +1965,11 @@ export const marcarNoShow = async (req, res) => {
   }
 };
 
-
-//  Extender estadía
-
+// ============================================================
+// HU-R8: Extender estadía
+// POST /api/reservas/:id/extender
+// Body: { nueva_fecha_fin: "YYYY-MM-DD", usuario? }
+// ============================================================
 export const extenderEstadia = async (req, res) => {
   const { id } = req.params;
   const { nueva_fecha_fin, usuario = "recepcion" } = req.body;
@@ -2031,10 +2049,10 @@ export const extenderEstadia = async (req, res) => {
   }
 };
 
-
-//  Historial de cambios
+// ============================================================
+// HU-R11: Historial de cambios
 // GET /api/reservas/:id/historial
-
+// ============================================================
 export const obtenerHistorialReserva = async (req, res) => {
   const { id } = req.params;
   try {
@@ -2053,10 +2071,10 @@ export const obtenerHistorialReserva = async (req, res) => {
 };
 
 
-
+// ============================================================
 // GET /api/reservas/:id/registro-hotelero
 // Genera y descarga el PDF del registro hotelero (pdfkit)
-
+// ============================================================
 export const generarRegistroHotelero = async (req, res) => {
   const { id } = req.params;
   try {

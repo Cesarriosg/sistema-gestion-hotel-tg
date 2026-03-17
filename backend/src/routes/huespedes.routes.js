@@ -6,7 +6,7 @@ import {
   crearHuesped,
   actualizarHuesped,
   buscarHuespedPorDocumento,
-  obtenerEstadiasHuesped,
+  historialHuesped,
 } from "../controllers/huespedes.controller.js";
 import { verificarToken } from "../middlewares/authMiddleware.js";
 
@@ -17,8 +17,9 @@ router.get("/buscar", verificarToken, buscarHuespedPorDocumento);
 router.get("/",       verificarToken, listarHuespedes);
 
 // ── Con parámetro /:id ────────────────────────────────────────────────────────
-router.get("/:id/estadias", verificarToken, obtenerEstadiasHuesped);
-router.get("/:id",          verificarToken, obtenerHuesped);
+//router.get("/:id/estadias", verificarToken, obtenerEstadiasHuesped);
+router.get("/:id/historial", verificarToken, historialHuesped);
+router.get("/:id",           verificarToken, obtenerHuesped);
 router.post("/",            verificarToken, crearHuesped);
 router.put("/:id",          verificarToken, actualizarHuesped);
 

@@ -1,4 +1,4 @@
-
+// src/pages/NuevaReservaLibre.jsx
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
@@ -14,6 +14,7 @@ export default function NuevaReservaLibre() {
   // selección principal
   const [tipo, setTipo] = useState("doble");
   const [plan, setPlan] = useState("C1");
+  const [planes, setPlanes] = useState(["C1", "GK"]); // se cargan desde la API
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
 
@@ -38,6 +39,13 @@ export default function NuevaReservaLibre() {
   const [guardando, setGuardando] = useState(false);
   const [cargandoPrecio, setCargandoPrecio] = useState(false);
   const [cargandoDisponibles, setCargandoDisponibles] = useState(false);
+
+  // Cargar planes dinámicos desde la API
+  useEffect(() => {
+    axios.get("http://localhost:4000/api/tarifas/planes", { headers: getAuthHeaders() })
+      .then(({ data }) => { if (Array.isArray(data) && data.length) setPlanes(data); })
+      .catch(() => {}); // si falla, usa los defaults
+  }, []);
 
   const limpiarPrecio = () => {
     setPrecioNoche(null);
@@ -133,9 +141,9 @@ export default function NuevaReservaLibre() {
           huesped_email: email.trim() || null,
           notas: notas.trim() || null,
 
-          
+          // ✅ nuevo
           plan,
-          tarifa_snapshot: precioNoche, // congela precio/noche al crear 
+          tarifa_snapshot: precioNoche, // congela precio/noche al crear (recomendado)
         },
         { headers: getAuthHeaders() }
       );
@@ -178,9 +186,7 @@ export default function NuevaReservaLibre() {
             value={plan}
             onChange={(e) => setPlan(e.target.value)}
           >
-            <option value="C1">C1</option>
-            <option value="C2">C2</option>
-            {/* Si agregas más planes en BD, agrega aquí o cárgalos desde API */}
+            {planes.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
 

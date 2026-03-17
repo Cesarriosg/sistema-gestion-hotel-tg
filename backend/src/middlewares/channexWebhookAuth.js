@@ -1,14 +1,26 @@
+// src/middlewares/channexWebhookAuth.js
+// Channex envía un header x-channex-signature con HMAC-SHA256 del body.
+// En sandbox/staging se puede deshabilitar la verificación de firma.
+
+import crypto from "crypto";
+
 export const verificarChannexWebhook = (req, res, next) => {
-  const secret = process.env.CHANNEX_WEBHOOK_SECRET || "";
-  const header = req.headers["x-ota-secret"] || "";
+  // En staging no forzamos firma — solo logueamos
+  const signature = req.headers["x-channex-signature"] || "";
+  const secret    = process.env.CHANNEX_WEBHOOK_SECRET || "";
 
-  if (!secret) {
-    return res.status(500).json({ message: "CHANNEX_WEBHOOK_SECRET no configurado." });
+  if (secret && signature) {
+    const expected = crypto
+      .createHmac("sha256", secret)
+      .update(JSON.stringify(req.body))
+      .digest("hex");
+
+    if (signature !== expected) {
+      console.warn("⚠️  Channex webhook signature mismatch — rechazado");
+      return res.status(401).json({ message: "Webhook signature inválida." });
+    }
   }
 
-  if (String(header) !== String(secret)) {
-    return res.status(401).json({ message: "Webhook no autorizado." });
-  }
-
+  // Sin secret configurado → permitir (staging/demo)
   next();
 };

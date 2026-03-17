@@ -12,18 +12,17 @@ import {
 
 const router = Router();
 
-// Salud / test
-router.get("/test", testConnection);
+// Test
+router.get("/test",      testConnection);
 
-// Dashboard (cualquier autenticado)
+// Dashboard (todos los autenticados)
 router.get("/dashboard", verificarToken, obtenerDashboard);
 
-// Fecha del sistema — compatible con config_routes.js antiguo (/api/config/fecha-sistema)
-// y también con /api/fecha-sistema
+// Fecha operativa (compatible con /api/fecha-sistema)
 router.get("/fecha-sistema", obtenerFechaSistema);
 router.put("/fecha-sistema", verificarToken, soloAdmin, actualizarFechaSistema);
 
-// Configuración hotel
+// Config hotel
 router.get("/hotel/config", verificarToken, obtenerConfigHotel);
 router.put("/hotel/config", verificarToken, soloAdmin, actualizarConfigHotel);
 
