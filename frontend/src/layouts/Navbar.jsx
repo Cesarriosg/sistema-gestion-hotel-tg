@@ -93,7 +93,7 @@ export default function Navbar() {
                 <DropItem to="/administracion" label="Habitaciones y tarifas" onClose={close} />
                 <DropItem to="/usuarios"       label="Usuarios del sistema"   onClose={close} />
                 <hr className="dropdown-divider my-1" />
-                <DropItem to="/otas"           label="🔗 Canales OTA"          onClose={close} />
+                <DropItem to="/otas"           label="Canales OTA"          onClose={close} />
                 <hr className="dropdown-divider my-1" />
                 <DropItem to="/config-hotel"   label="Configuracion del hotel" onClose={close} />
               </NavDropdown>

@@ -62,6 +62,12 @@ export const listarReservas = async (req, res) => {
       `);
     }
 
+    // Filtro por origen (ota | manual)
+    if (req.query.origen) {
+      params.push(req.query.origen.trim());
+      filtros.push(`r.origen = $${params.length}`);
+    }
+
     // Filtro por estado
     if (estado && estado !== "todas") {
       params.push(estado.trim());
@@ -80,6 +86,17 @@ export const listarReservas = async (req, res) => {
       filtros.push(`r.fecha_inicio <= $${params.length}::date`);
     }
 
+    // Filtro por origen (manual | ota)
+    const { origen = "", fuente = "" } = req.query;
+    if (origen.trim()) {
+      params.push(origen.trim());
+      filtros.push(`r.origen = $${params.length}`);
+    }
+    if (fuente.trim()) {
+      params.push(fuente.trim());
+      filtros.push(`r.fuente = $${params.length}`);
+    }
+
     const where = filtros.length ? `WHERE ${filtros.join(" AND ")}` : "";
 
     const sql = `
@@ -94,6 +111,11 @@ export const listarReservas = async (req, res) => {
         r.checkin_at,
         r.checkout_at,
         r.created_at,
+        r.origen,
+        r.fuente,
+        r.ota_canal,
+        r.ota_reserva_id,
+        r.ota_payload,
         h.numero  AS habitacion_numero,
         h.tipo    AS habitacion_tipo,
         COALESCE(
@@ -103,7 +125,12 @@ export const listarReservas = async (req, res) => {
         ) AS huesped_nombre,
         hu.documento,
         hu.telefono,
-        hu.email
+        hu.email,
+        r.origen,
+        r.fuente,
+        r.ota_canal,
+        r.ota_reserva_id,
+        r.ota_payload
       FROM reservas r
       JOIN habitaciones h  ON h.id = r.habitacion_id
       LEFT JOIN huespedes hu ON hu.id = r.huesped_id
@@ -517,7 +544,6 @@ export const actualizarReserva = async (req, res) => {
     estado,
     notas,
     habitacion_numero,
-    plan,
     fuente,
     usuario = "recepcion",
   } = req.body;
@@ -624,12 +650,11 @@ export const actualizarReserva = async (req, res) => {
           fecha_fin     = $3,
           estado        = COALESCE($4, estado),
           notas         = COALESCE($5, notas),
-          plan          = COALESCE($7, plan),
           updated_at    = NOW()
       WHERE id = $6
       RETURNING *
       `,
-      [nuevaHabitacionId, nuevoDesde, nuevoHasta, estado, notas, reservaId, plan || null]
+      [nuevaHabitacionId, nuevoDesde, nuevoHasta, estado, notas, reservaId]
     );
 
     // HU-R15: guardar fuente si viene
@@ -716,6 +741,7 @@ export const cancelarReserva = async (req, res) => {
     );
 
     await client.query("COMMIT");
+    try { const fn = req?.app?.get("emitNotificacion"); if(fn) fn("warning","Reserva cancelada",`Reserva #${id} cancelada.`,{reserva_id:id}); } catch(_){}
     res.json(upd.rows[0]);
   } catch (e) {
     await client.query("ROLLBACK");
@@ -944,6 +970,7 @@ export const checkinReserva = async (req, res) => {
     await generarCargoAlojamientoReserva(client,id);
 
     await client.query("COMMIT");
+    try { const fn = req?.app?.get("emitNotificacion"); if(fn) fn("success","Check-in registrado",`Check-in realizado para reserva #${id}.`,{reserva_id:id}); } catch(_){}
     return res.json(updReserva.rows[0]);
   } catch (e) {
     await client.query("ROLLBACK");
@@ -1071,6 +1098,7 @@ export const checkoutReserva = async (req, res) => {
     );
 
     await client.query("COMMIT");
+    try { const fn = req?.app?.get("emitNotificacion"); if(fn) fn("info","Check-out registrado",`Check-out realizado para reserva #${reservaId}.`,{reserva_id:reservaId}); } catch(_){}
     return res.json(upd.rows[0]);
   } catch (e) {
     await client.query("ROLLBACK");
@@ -1999,28 +2027,32 @@ export const extenderEstadia = async (req, res) => {
     const fechaFinActual = dayjs(r.fecha_fin).format("YYYY-MM-DD");
     const fechaFinNueva  = dayjs(nueva_fecha_fin).format("YYYY-MM-DD");
 
-    if (!dayjs(fechaFinNueva).isAfter(fechaFinActual)) {
+    // Validar mínimo: nueva fecha debe ser al menos 1 día después del check-in
+    if (!dayjs(fechaFinNueva).isAfter(dayjs(r.fecha_inicio))) {
       await client.query("ROLLBACK");
       return res.status(400).json({
-        message: "La nueva fecha de salida debe ser posterior a la actual.",
+        message: "La fecha de salida debe ser al menos un día después del check-in.",
       });
     }
 
-    // Verificar disponibilidad en el rango extendido
-    const { rows: choque } = await client.query(`
-      SELECT 1 FROM reservas
-      WHERE habitacion_id = $1
-        AND id <> $2
-        AND estado <> 'cancelada'
-        AND daterange(fecha_inicio, fecha_fin, '[)') && daterange($3, $4, '[)')
-      LIMIT 1
-    `, [r.habitacion_id, id, fechaFinActual, fechaFinNueva]);
-
-    if (choque.length) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({
-        message: "La habitación ya tiene otra reserva en el rango de extensión.",
-      });
+    // Solo verificar choques si se extiende; si se reduce no hay conflicto
+    const seExtiende = dayjs(fechaFinNueva).isAfter(dayjs(fechaFinActual));
+    if (seExtiende) {
+      const { rows: choque } = await client.query(
+        `SELECT 1 FROM reservas
+         WHERE habitacion_id = $1
+           AND id <> $2
+           AND estado <> 'cancelada'
+           AND daterange(fecha_inicio, fecha_fin, '[)') && daterange($3, $4, '[)')
+         LIMIT 1`,
+        [r.habitacion_id, id, fechaFinActual, fechaFinNueva]
+      );
+      if (choque.length) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          message: "La habitación ya tiene otra reserva en ese rango.",
+        });
+      }
     }
 
     await client.query(
@@ -2034,12 +2066,12 @@ export const extenderEstadia = async (req, res) => {
     await client.query(
       `INSERT INTO reservas_historial
          (reserva_id, usuario, accion, campo, valor_anterior, valor_nuevo, notas)
-       VALUES ($1, $2, 'extendida', 'fecha_fin', $3, $4, 'Extensión de estadía')`,
-      [id, usuario, fechaFinActual, fechaFinNueva]
+       VALUES ($1, $2, 'modificada', 'fecha_fin', $3, $4, $5)`,
+      [id, usuario, fechaFinActual, fechaFinNueva, seExtiende ? 'Extensión de estadía' : 'Reducción de estadía']
     );
 
     await client.query("COMMIT");
-    res.json({ message: "Estadía extendida.", fecha_fin: fechaFinNueva });
+    res.json({ message: seExtiende ? "Estadía extendida." : "Estadía reducida.", fecha_fin: fechaFinNueva });
   } catch (e) {
     await client.query("ROLLBACK");
     console.error("extenderEstadia error:", e);

@@ -18,7 +18,7 @@ import Facturacion       from "./pages/Facturacion";
 import NuevoBloqueo      from "./pages/NuevoBloqueo";
 import RegistroReserva   from "./pages/RegistroReserva.jsx";
 import FolioReserva        from "./pages/FolioReserva.jsx";
-import Administracion    from "./pages/Administracion"; // Habitaciones + Tarifas unificado
+import Administracion    from "./pages/Administracion"; 
 import Usuarios          from "./pages/Usuarios";
 import ConfigHotel       from "./pages/ConfigHotel";
 import CierreDia         from "./pages/CierreDia";
