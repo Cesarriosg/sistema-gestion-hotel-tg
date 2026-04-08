@@ -83,6 +83,7 @@ export default function Huespedes() {
     } finally {
       setCargando(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, q]);
 
   useEffect(() => { cargar({ page:1 }); }, []); // eslint-disable-line

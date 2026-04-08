@@ -80,6 +80,7 @@ function TabHabitaciones({ planes }) {
     finally { setGuardandoNotas(false); }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const guardarPlanTarifa = async (habId) => {
     const row = edits[habId] || {};
     const plan   = String(row.plan || "").trim();
