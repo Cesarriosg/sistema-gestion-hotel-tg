@@ -33,8 +33,19 @@ dotenv.config();
 const app = express();
 
 // Middlewares
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://hoteltg26.vercel.app",
+];
+
 const corsOptions = {
-  origin: "http://localhost:3000",
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
@@ -50,7 +61,7 @@ const server = http.createServer(app);
 //  Socket.IO
 const io = new SocketIOServer(server, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: allowedOrigins,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
