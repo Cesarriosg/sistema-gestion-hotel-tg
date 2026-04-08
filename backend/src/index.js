@@ -119,19 +119,23 @@ const PORT = process.env.PORT || 4000;
 
 // Migración: ampliar CHECK constraint de pagos para incluir 'descuento'
 (async () => {
-  const client = await pool.connect();
   try {
-    await client.query("ALTER TABLE pagos DROP CONSTRAINT IF EXISTS pagos_tipo_check");
-    await client.query(`
-      ALTER TABLE pagos
-      ADD CONSTRAINT pagos_tipo_check
-      CHECK (tipo IN ('pago', 'deposito', 'cargo', 'descuento'))
-    `);
-    console.log("✅ Migración pagos_tipo_check: 'descuento' habilitado.");
+    const client = await pool.connect();
+    try {
+      await client.query("ALTER TABLE pagos DROP CONSTRAINT IF EXISTS pagos_tipo_check");
+      await client.query(`
+        ALTER TABLE pagos
+        ADD CONSTRAINT pagos_tipo_check
+        CHECK (tipo IN ('pago', 'deposito', 'cargo', 'descuento'))
+      `);
+      console.log("✅ Migración pagos_tipo_check: 'descuento' habilitado.");
+    } catch (e) {
+      console.error("⚠️  Migración pagos_tipo_check falló:", e.message);
+    } finally {
+      client.release();
+    }
   } catch (e) {
-    console.error("⚠️  Migración pagos_tipo_check falló:", e.message);
-  } finally {
-    client.release();
+    console.error("⚠️  No se pudo conectar para migración (DB no disponible):", e.message);
   }
 })();
 
