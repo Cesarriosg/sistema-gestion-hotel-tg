@@ -7,6 +7,8 @@ const getAuthHeaders = () => {
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
+const BASE = process.env.REACT_APP_API_URL || "http://localhost:4000";
+
 export default function ReservaForm({ onClose, onReservaCreada }) {
   // Datos huésped
   const [nombre, setNombre] = useState("");
@@ -33,7 +35,7 @@ export default function ReservaForm({ onClose, onReservaCreada }) {
   const buscarHuesped = async (doc) => {
     try {
       const res = await axios.get(
-        `http://localhost:4000/api/huespedes/buscar/${doc}`,
+        `${BASE}/api/huespedes/buscar/${doc}`,
         { headers: getAuthHeaders() }
       );
 
@@ -63,7 +65,7 @@ export default function ReservaForm({ onClose, onReservaCreada }) {
 
     try {
       setBuscando(true);
-      const r = await axios.get("http://localhost:4000/api/reservas/disponibles", {
+      const r = await axios.get(`${BASE}/api/reservas/disponibles`, {
         params: {
           desde: inicio,
           hasta: fin,
@@ -102,7 +104,7 @@ export default function ReservaForm({ onClose, onReservaCreada }) {
       setGuardando(true);
 
       await axios.post(
-        "http://localhost:4000/api/reservas",
+        `${BASE}/api/reservas`,
         {
           tipo: "reserva",
           habitacion_numero: habSeleccionada,

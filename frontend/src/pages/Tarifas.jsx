@@ -7,7 +7,7 @@ import {
   Modal, Alert, Spinner,
 } from "react-bootstrap";
 
-const API = "http://localhost:4000";
+const API = process.env.REACT_APP_API_URL || "http://localhost:4000";
 const getAuthHeaders = () => {
   const token = localStorage.getItem("token");
   return token ? { Authorization: `Bearer ${token}` } : {};

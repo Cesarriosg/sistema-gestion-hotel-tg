@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Button, Badge, Form, Modal } from "react-bootstrap";
 
-const API = "http://localhost:4000";
+const API = process.env.REACT_APP_API_URL || "http://localhost:4000";
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem("token");

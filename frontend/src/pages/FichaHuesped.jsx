@@ -5,7 +5,7 @@ import dayjs from "dayjs";
 import axios from "axios";
 import huespedesService from "../services/huespedesService";
 
-const API = "http://localhost:4000";
+const API = process.env.REACT_APP_API_URL || "http://localhost:4000";
 const getAuth = () => { const t = localStorage.getItem("token"); return t ? { headers: { Authorization: `Bearer ${t}` } } : {}; };
 
 const fmt   = (f) => (f ? dayjs(f).format("DD/MM/YYYY") : "—");

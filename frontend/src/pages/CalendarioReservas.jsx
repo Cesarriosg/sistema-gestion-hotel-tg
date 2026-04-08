@@ -8,7 +8,7 @@ import "react-big-calendar/lib/css/react-big-calendar.css";
 dayjs.locale("es");
 const localizer = dayjsLocalizer(dayjs);
 
-const API = "http://localhost:4000";
+const API = process.env.REACT_APP_API_URL || "http://localhost:4000";
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem("token");

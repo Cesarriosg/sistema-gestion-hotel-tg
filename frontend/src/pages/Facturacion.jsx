@@ -7,7 +7,7 @@ import {
   Button, Card, Col, Form, Modal, Row, Table, Tabs, Tab, Spinner, Badge,
 } from "react-bootstrap";
 
-const API = "http://localhost:4000";
+const API = process.env.REACT_APP_API_URL || "http://localhost:4000";
 const getAuth = () => {
   const t = localStorage.getItem("token");
   return t ? { headers: { Authorization: `Bearer ${t}` } } : {};

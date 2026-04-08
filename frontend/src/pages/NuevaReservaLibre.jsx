@@ -8,6 +8,8 @@ const getAuthHeaders = () => {
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
+const BASE = process.env.REACT_APP_API_URL || "http://localhost:4000";
+
 export default function NuevaReservaLibre() {
   const nav = useNavigate();
 
@@ -43,14 +45,14 @@ export default function NuevaReservaLibre() {
 
   // Cargar tipos de habitación y planes desde la API
   useEffect(() => {
-    axios.get("http://localhost:4000/api/tipos-habitacion", { headers: getAuthHeaders() })
+    axios.get(`${BASE}/api/tipos-habitacion`, { headers: getAuthHeaders() })
       .then(({ data }) => {
         const activos = (data || []).filter(t => t.activo);
         setTipos(activos);
         if (activos.length > 0) setTipo(activos[0].nombre);
       })
       .catch(() => {});
-    axios.get("http://localhost:4000/api/planes", { headers: getAuthHeaders() })
+    axios.get(`${BASE}/api/planes`, { headers: getAuthHeaders() })
       .then(({ data }) => {
         const activos = (data || []).filter(p => p.activo);
         setPlanes(activos);
@@ -74,7 +76,7 @@ export default function NuevaReservaLibre() {
     try {
       setCargandoPrecio(true);
       const { data } = await axios.get(
-        "http://localhost:4000/api/reservas/precio",
+        `${BASE}/api/reservas/precio`,
         { params: { tipo, plan, desde, hasta }, headers: getAuthHeaders() }
       );
 
@@ -99,7 +101,7 @@ export default function NuevaReservaLibre() {
     try {
       setCargandoDisponibles(true);
       const { data } = await axios.get(
-        "http://localhost:4000/api/reservas/disponibles",
+        `${BASE}/api/reservas/disponibles`,
         { params: { tipo, desde, hasta }, headers: getAuthHeaders() }
       );
 
@@ -140,7 +142,7 @@ export default function NuevaReservaLibre() {
       setGuardando(true);
 
       await axios.post(
-        "http://localhost:4000/api/reservas",
+        `${BASE}/api/reservas`,
         {
           tipo: "reserva",
           habitacion_numero: habNumero,

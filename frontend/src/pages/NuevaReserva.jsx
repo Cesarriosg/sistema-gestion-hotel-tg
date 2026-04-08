@@ -5,7 +5,7 @@ import axios from "axios";
 import dayjs from "dayjs";
 import { Card, Row, Col, Form, Button, Alert, Spinner, Badge } from "react-bootstrap";
 
-const API = "http://localhost:4000";
+const API = process.env.REACT_APP_API_URL || "http://localhost:4000";
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem("token");

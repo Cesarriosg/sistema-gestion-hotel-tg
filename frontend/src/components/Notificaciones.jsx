@@ -25,7 +25,7 @@ export default function Notificaciones() {
       .catch(() => {});
 
     // Conectar socket
-    const socket = io("http://localhost:4000", { transports: ["websocket"] });
+    const socket = io(process.env.REACT_APP_API_URL || "http://localhost:4000", { transports: ["websocket"] });
     socketRef.current = socket;
     socket.on("notificacion", (n) => {
       setNotifs(prev => [n, ...prev].slice(0, 30));
