@@ -219,16 +219,14 @@ export const channexWebhook = async (req, res) => {
       console.log(`✅ Reserva OTA guardada → #${reserva.id} Hab ${hab.numero} (${fecha_inicio}→${fecha_fin})`);
 
       // Notificar al frontend via Socket.IO
-      const io = global.ioInstance;
-      if (io) {
-        io.emit("notificacion", {
-          tipo: "ota_nueva_reserva",
-          titulo: "Nueva reserva OTA",
-          mensaje: `${customer_name} — Hab ${hab.numero} · ${dayjs(fecha_inicio).format("DD/MM")} → ${dayjs(fecha_fin).format("DD/MM")}`,
-          datos: { reserva_id: reserva.id },
-          leida: false,
-          created_at: new Date().toISOString(),
-        });
+      const emitNotificacion = req.app?.get("emitNotificacion");
+      if (emitNotificacion) {
+        emitNotificacion(
+          "ota_nueva_reserva",
+          "Nueva reserva OTA",
+          `${customer_name} — Hab ${hab.numero} · ${dayjs(fecha_inicio).format("DD/MM")} → ${dayjs(fecha_fin).format("DD/MM")}`,
+          { reserva_id: reserva.id }
+        );
       }
 
     } catch (e) {
@@ -537,5 +535,77 @@ export const otaSyncLog = async (req, res) => {
     return res.json(q.rows);
   } catch (e) {
     return res.status(500).json({ message: "Error obteniendo sync log." });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8) GET propiedades de Channex
+//    GET /api/otas/channex/properties
+// ─────────────────────────────────────────────────────────────────────────────
+export const channexGetProperties = async (_req, res) => {
+  if (!CHANNEX_KEY()) return res.status(400).json({ message: "CHANNEX_API_KEY no configurada." });
+  try {
+    const r = await axios.get(`${CHANNEX_BASE}/properties`, {
+      headers: { "api-key": CHANNEX_KEY() },
+    });
+    return res.json(r.data?.data || []);
+  } catch (e) {
+    return res.status(500).json({ message: "Error consultando Channex.", detail: e?.response?.data || e.message });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9) GET room types de una propiedad Channex
+//    GET /api/otas/channex/room-types?property_id=xxx
+// ─────────────────────────────────────────────────────────────────────────────
+export const channexGetRoomTypes = async (req, res) => {
+  const { property_id } = req.query;
+  if (!CHANNEX_KEY()) return res.status(400).json({ message: "CHANNEX_API_KEY no configurada." });
+  if (!property_id) return res.status(400).json({ message: "property_id requerido." });
+  try {
+    const r = await axios.get(`${CHANNEX_BASE}/room_types`, {
+      headers: { "api-key": CHANNEX_KEY() },
+      params: { property_id },
+    });
+    return res.json(r.data?.data || []);
+  } catch (e) {
+    return res.status(500).json({ message: "Error consultando Channex.", detail: e?.response?.data || e.message });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10) GET habitaciones con su mapeo Channex actual
+//     GET /api/otas/channex/mapping
+// ─────────────────────────────────────────────────────────────────────────────
+export const channexGetMapping = async (_req, res) => {
+  try {
+    const q = await pool.query(
+      `SELECT id, numero, tipo, channex_property_id, channex_room_type_id
+       FROM habitaciones ORDER BY numero`
+    );
+    return res.json(q.rows);
+  } catch (e) {
+    return res.status(500).json({ message: "Error obteniendo mapeo." });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 11) PUT mapeo Channex para una habitación
+//     PUT /api/otas/channex/mapping/:habitacion_id
+// ─────────────────────────────────────────────────────────────────────────────
+export const channexSaveMapping = async (req, res) => {
+  const { habitacion_id } = req.params;
+  const { channex_property_id, channex_room_type_id } = req.body;
+  try {
+    const q = await pool.query(
+      `UPDATE habitaciones
+       SET channex_property_id = $1, channex_room_type_id = $2, updated_at = NOW()
+       WHERE id = $3 RETURNING id, numero, tipo, channex_property_id, channex_room_type_id`,
+      [channex_property_id || null, channex_room_type_id || null, habitacion_id]
+    );
+    if (!q.rows.length) return res.status(404).json({ message: "Habitación no encontrada." });
+    return res.json(q.rows[0]);
+  } catch (e) {
+    return res.status(500).json({ message: "Error guardando mapeo." });
   }
 };

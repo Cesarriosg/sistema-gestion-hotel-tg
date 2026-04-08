@@ -11,6 +11,10 @@ import {
   otaUpsertConfig,
   otaStatsReservas,
   otaSyncLog,
+  channexGetProperties,
+  channexGetRoomTypes,
+  channexGetMapping,
+  channexSaveMapping,
 } from "../controllers/otas.controller.js";
 
 const router = Router();
@@ -31,5 +35,11 @@ router.get("/stats/reservas",     verificarToken, otaStatsReservas);
 
 // ── Log de sincronizaciones RF-16/17 ────────────────────────────────────────
 router.get("/sync-log",           verificarToken, soloAdmin, otaSyncLog);
+
+// ── Channex: propiedades, room types y mapeo ─────────────────────────────────
+router.get("/channex/properties",          verificarToken, soloAdmin, channexGetProperties);
+router.get("/channex/room-types",          verificarToken, soloAdmin, channexGetRoomTypes);
+router.get("/channex/mapping",             verificarToken, soloAdmin, channexGetMapping);
+router.put("/channex/mapping/:habitacion_id", verificarToken, soloAdmin, channexSaveMapping);
 
 export default router;
