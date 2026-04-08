@@ -18,12 +18,15 @@ import Facturacion       from "./pages/Facturacion";
 import NuevoBloqueo      from "./pages/NuevoBloqueo";
 import RegistroReserva   from "./pages/RegistroReserva.jsx";
 import FolioReserva        from "./pages/FolioReserva.jsx";
-import Administracion    from "./pages/Administracion"; 
+import Administracion    from "./pages/Administracion"; // Habitaciones + Tarifas unificado
 import Usuarios          from "./pages/Usuarios";
 import ConfigHotel       from "./pages/ConfigHotel";
 import CierreDia         from "./pages/CierreDia";
 import Reportes          from "./pages/Reportes";
 import OTAs            from "./pages/OTAs";
+import CheckoutReserva from "./pages/CheckoutReserva";
+import Planes          from "./pages/Planes";
+import Promociones     from "./pages/Promociones";
 
 function LayoutPrincipal() {
   return (
@@ -70,7 +73,7 @@ export default function App() {
             <Route path="/reservas/nueva"        element={<NuevaReservaLibre />} />
             <Route path="/reservas/nueva-manual" element={<NuevaReserva />} />
             <Route path="/reservas/:id/cargos"   element={<CargosReserva />} />
-            <Route path="/reservas/:id"          element={<CargosReserva />} />
+            <Route path="/reservas/:id"          element={<RegistroReserva />} />
 
             {/* Recepcion */}
             <Route path="/checkin/:id"   element={<CheckIn />} />
@@ -83,8 +86,12 @@ export default function App() {
 
             {/* Facturacion, auditoria y reportes */}
             <Route path="/facturacion" element={<Facturacion />} />
+            <Route path="/facturacion/:id" element={<CheckoutReserva />} />
             <Route path="/cierre-dia"  element={<CierreDia />} />
             <Route path="/reportes"    element={<Reportes />} />
+
+            {/* OTAs — accesible para todos los usuarios autenticados */}
+            <Route path="/otas" element={<OTAs />} />
 
             {/* Folio — accesible para cualquier usuario autenticado */}
             <Route path="/folio/:id"              element={<FolioReserva />} />
@@ -95,12 +102,13 @@ export default function App() {
             <Route element={<AdminRoute />}>
               {/* Administracion unificada: Habitaciones + Tarifas */}
               <Route path="/administracion" element={<Administracion />} />
+              <Route path="/planes"         element={<Planes />} />
+              <Route path="/promociones"   element={<Promociones />} />
               {/* Redirige rutas antiguas al nuevo unificado */}
               <Route path="/habitaciones"   element={<Navigate to="/administracion" replace />} />
               <Route path="/tarifas"        element={<Navigate to="/administracion" replace />} />
               <Route path="/usuarios"       element={<Usuarios />} />
               <Route path="/config-hotel"   element={<ConfigHotel />} />
-              <Route path="/otas"             element={<OTAs />} />
             </Route>
 
           </Route>

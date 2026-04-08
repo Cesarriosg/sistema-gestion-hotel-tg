@@ -524,3 +524,26 @@ export const historialHuesped = async (req, res) => {
     res.status(500).json({ message: "Error al obtener historial del huésped." });
   }
 };
+
+// GET /api/huespedes/:id/pagos — Historial de pagos consolidado del huésped
+export const pagosPorHuesped = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         p.id, p.reserva_id, p.tipo, p.metodo, p.monto, p.referencia, p.created_at,
+         h.numero AS habitacion_numero, h.tipo AS habitacion_tipo,
+         r.fecha_inicio, r.fecha_fin
+       FROM pagos p
+       JOIN reservas r ON r.id = p.reserva_id
+       JOIN habitaciones h ON h.id = r.habitacion_id
+       WHERE r.huesped_id = $1
+       ORDER BY p.created_at DESC`,
+      [id]
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error("pagosPorHuesped error:", e);
+    res.status(500).json({ message: "Error al obtener pagos del huésped." });
+  }
+};

@@ -129,26 +129,50 @@ export default function RegistroReserva() {
     }
   };
 
-  const cargar = useCallback(async () => {
-    setLoading(true); setErr("");
-    try {
-      const [rRes, rHuespedes] = await Promise.all([
-        axios.get(`${API}/api/reservas/${id}`, { headers: getH() }),
-        axios.get(`${API}/api/reservas/${id}/huespedes-asociados`, { headers: getH() }),
-      ]);
-      setReserva(rRes.data?.reserva || rRes.data);
-      setHuespedes(Array.isArray(rHuespedes.data) ? rHuespedes.data : []);
-    } catch (e) {
-      setErr(e?.response?.data?.message || "No se pudo cargar el registro.");
-    } finally { setLoading(false); }
-  }, [id]);
+  const [tarifa,    setTarifa]    = useState(null); // { precio_noche, noches, total }
+  const [descuentos, setDescuentos] = useState([]); // movimientos tipo='descuento'
 
   const cargarPlanes = useCallback(async () => {
     try {
-      const { data } = await axios.get(`${API}/api/tarifas/planes`, { headers: getH() });
-      setPlanes(Array.isArray(data) && data.length ? data : ["C1", "GK"]);
-    } catch { setPlanes(["C1", "GK"]); }
+      const { data } = await axios.get(`${API}/api/planes`, { headers: getH() });
+      setPlanes(Array.isArray(data) ? data.filter(p => p.activo) : []);
+    } catch { setPlanes([]); }
   }, []);
+
+  const cargarTarifa = useCallback(async (reservaData) => {
+    if (!reservaData) return;
+    try {
+      const { data } = await axios.get(`${API}/api/reservas/precio`, {
+        params: {
+          tipo: reservaData.habitacion_tipo,
+          plan: reservaData.plan,
+          desde: String(reservaData.fecha_inicio).slice(0, 10),
+          hasta: String(reservaData.fecha_fin).slice(0, 10),
+        },
+        headers: getH(),
+      });
+      setTarifa(data);
+    } catch { setTarifa(null); }
+  }, []);
+
+  const cargar = useCallback(async () => {
+    setLoading(true); setErr("");
+    try {
+      const [rRes, rHuespedes, rFinanzas] = await Promise.all([
+        axios.get(`${API}/api/reservas/${id}`, { headers: getH() }),
+        axios.get(`${API}/api/reservas/${id}/huespedes-asociados`, { headers: getH() }),
+        axios.get(`${API}/api/reservas/${id}/finanzas`, { headers: getH() }).catch(() => null),
+      ]);
+      const res = rRes.data?.reserva || rRes.data;
+      setReserva(res);
+      setHuespedes(Array.isArray(rHuespedes.data) ? rHuespedes.data : []);
+      cargarTarifa(res);
+      const movs = rFinanzas?.data?.movimientos || [];
+      setDescuentos(movs.filter(m => m.tipo === "descuento"));
+    } catch (e) {
+      setErr(e?.response?.data?.message || "No se pudo cargar el registro.");
+    } finally { setLoading(false); }
+  }, [id, cargarTarifa]);
 
   const cargarHabs = useCallback(async () => {
     if (!reserva) return;
@@ -168,7 +192,7 @@ export default function RegistroReserva() {
     setPanel(p === panel ? null : p);
     setMsgOp({ text: "", type: "error" });
     if (p === "cambiarHab" && habitaciones.length === 0) cargarHabs();
-    if (p === "cambiarPlan" && reserva) setNuevoPlan(reserva.plan || planes[0] || "");
+    if (p === "cambiarPlan" && reserva) setNuevoPlan(reserva.plan || (planes[0]?.codigo ?? planes[0] ?? ""));
     if (p === "extender"   && reserva) setNuevaFechaFin(dayjs(reserva.fecha_fin).format("YYYY-MM-DD"));
     if (p === "notas"      && reserva) setNuevasNotas(reserva.notas || "");
   };
@@ -309,6 +333,48 @@ export default function RegistroReserva() {
           <div style={row}><span style={label}>Check-out</span><span style={value}>{fmtF(reserva.fecha_fin)}</span></div>
           <div style={row}><span style={label}>Noches</span><span style={value}>{dayjs(reserva.fecha_fin).diff(dayjs(reserva.fecha_inicio), "day")}</span></div>
           <div style={row}><span style={label}>Fuente</span><span style={value}>{reserva.fuente || "—"}</span></div>
+          <div style={row}>
+            <span style={label}>Tarifa / noche</span>
+            <span style={{ ...value, color: tarifa ? C.green : C.gray }}>
+              {tarifa
+                ? Number(tarifa.precio_noche).toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 })
+                : "Sin tarifa para este plan/fechas"}
+            </span>
+          </div>
+          <div style={row}>
+            <span style={label}>Total alojamiento</span>
+            <span style={{ ...value, fontWeight: 700, color: tarifa ? C.navy : C.gray }}>
+              {tarifa
+                ? Number(tarifa.total).toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 })
+                : "—"}
+            </span>
+          </div>
+          {descuentos.length > 0 && (() => {
+            const totalDesc = descuentos.reduce((s, d) => s + Number(d.monto || 0), 0);
+            const totalConDesc = tarifa ? Number(tarifa.total) - totalDesc : null;
+            return (
+              <>
+                {descuentos.map(d => (
+                  <div key={d.id} style={{ ...row, gridColumn: "1 / -1" }}>
+                    <span style={{ color: C.green, fontSize: 13 }}>
+                      🏷 {String(d.referencia || "Descuento").replace(/\[PROMO-\d+\]/, "").trim()}
+                    </span>
+                    <span style={{ color: C.green, fontWeight: 600 }}>
+                      -{Number(d.monto).toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                ))}
+                {totalConDesc !== null && (
+                  <div style={{ ...row, gridColumn: "1 / -1", borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 4 }}>
+                    <span style={{ ...label, fontWeight: 700, color: C.navy }}>Total con descuento</span>
+                    <span style={{ ...value, fontWeight: 800, fontSize: 16, color: C.green }}>
+                      {totalConDesc.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                )}
+              </>
+            );
+          })()}
           {reserva.notas && (
             <div style={{ ...row, gridColumn: "1 / -1" }}>
               <span style={label}>Notas</span>
@@ -380,9 +446,16 @@ export default function RegistroReserva() {
                   Plan actual: <Tag>{reserva.plan || "—"}</Tag>
                 </div>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                  <select style={{ ...inputS, width: "auto", minWidth: 160 }}
+                  <select style={{ ...inputS, width: "auto", minWidth: 200 }}
                     value={nuevoPlan} onChange={(e) => setNuevoPlan(e.target.value)}>
-                    {planes.map((p) => <option key={p} value={p}>{p}</option>)}
+                    {planes.length === 0
+                      ? <option value="">Sin planes — ve a Administración → Planes</option>
+                      : planes.map((p) => {
+                          const cod = p.codigo ?? p;
+                          const desc = p.descripcion;
+                          return <option key={cod} value={cod}>{cod}{desc ? ` — ${desc}` : ""}</option>;
+                        })
+                    }
                   </select>
                   <button onClick={cambiarPlan} disabled={guardando} style={{ ...btnPrim, background: C.amber }}>
                     {guardando ? "Cambiando..." : "Confirmar cambio"}

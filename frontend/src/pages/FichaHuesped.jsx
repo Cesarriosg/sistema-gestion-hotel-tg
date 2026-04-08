@@ -2,7 +2,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
+import axios from "axios";
 import huespedesService from "../services/huespedesService";
+
+const API = "http://localhost:4000";
+const getAuth = () => { const t = localStorage.getItem("token"); return t ? { headers: { Authorization: `Bearer ${t}` } } : {}; };
 
 const fmt   = (f) => (f ? dayjs(f).format("DD/MM/YYYY") : "—");
 const money = (v) => Number(v||0).toLocaleString("es-CO",{style:"currency",currency:"COP",maximumFractionDigits:0});
@@ -26,6 +30,9 @@ export default function FichaHuesped() {
   const [loading,  setLoading]  = useState(true);
   const [err,      setErr]      = useState("");
   const [filtro,   setFiltro]   = useState("todos");
+  const [tabActiva,setTabActiva]= useState("estadias");
+  const [pagos,    setPagos]    = useState([]);
+  const [cargPagos,setCargPagos]= useState(false);
 
   const cargar = useCallback(async () => {
     setLoading(true); setErr("");
@@ -41,6 +48,17 @@ export default function FichaHuesped() {
   },[id]);
 
   useEffect(()=>{cargar();},[cargar]);
+
+  const cargarPagos = useCallback(async () => {
+    setCargPagos(true);
+    try {
+      const { data } = await axios.get(`${API}/api/huespedes/${id}/pagos`, getAuth());
+      setPagos(data || []);
+    } catch { setPagos([]); }
+    finally { setCargPagos(false); }
+  }, [id]);
+
+  useEffect(() => { if (tabActiva === "pagos") cargarPagos(); }, [tabActiva, cargarPagos]);
 
   if (loading) return <div style={{textAlign:"center",padding:60,color:C.gray,fontFamily:"system-ui"}}>Cargando ficha...</div>;
   if (err)     return (
@@ -122,7 +140,68 @@ export default function FichaHuesped() {
         </div>
       )}
 
-      {/* Tabla historial */}
+      {/* Tabs */}
+      <div style={{display:"flex",gap:4,marginBottom:12}}>
+        {[["estadias","Estadías"],["pagos","Pagos"]].map(([k,label])=>(
+          <button key={k} onClick={()=>setTabActiva(k)}
+            style={{padding:"8px 18px",border:"none",borderRadius:8,cursor:"pointer",fontWeight:600,fontSize:13,
+              background: tabActiva===k ? C.blue : C.light,
+              color: tabActiva===k ? "#fff" : C.gray}}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab Pagos */}
+      {tabActiva === "pagos" && (
+        <div style={card}>
+          <div style={{fontSize:11,fontWeight:700,color:C.gray,letterSpacing:1.2,textTransform:"uppercase",marginBottom:14}}>
+            Historial de pagos ({pagos.length})
+          </div>
+          {cargPagos ? (
+            <div style={{color:C.gray}}>Cargando...</div>
+          ) : pagos.length === 0 ? (
+            <div style={{color:C.gray,fontSize:13}}>Sin pagos registrados.</div>
+          ) : (
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                <thead>
+                  <tr style={{borderBottom:`2px solid ${C.border}`}}>
+                    {["Reserva","Habitación","Entrada","Salida","Tipo","Método","Referencia","Monto"].map(h=>(
+                      <th key={h} style={{padding:"8px 10px",textAlign:"left",color:C.gray,fontWeight:600,fontSize:11,textTransform:"uppercase"}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagos.map(p=>(
+                    <tr key={p.id} style={{borderBottom:`1px solid ${C.border}`}}>
+                      <td style={{padding:"9px 10px",color:C.blue,fontWeight:600}}>#{p.reserva_id}</td>
+                      <td style={{padding:"9px 10px"}}>Hab. {p.habitacion_numero}</td>
+                      <td style={{padding:"9px 10px",whiteSpace:"nowrap"}}>{fmt(p.fecha_inicio)}</td>
+                      <td style={{padding:"9px 10px",whiteSpace:"nowrap"}}>{fmt(p.fecha_fin)}</td>
+                      <td style={{padding:"9px 10px"}}>
+                        <span style={{background:p.tipo==="pago"?"#dcfce7":p.tipo==="cargo"?"#fef2f2":"#eff6ff",
+                          color:p.tipo==="pago"?C.green:p.tipo==="cargo"?C.red:C.blue,
+                          borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:600}}>
+                          {p.tipo}
+                        </span>
+                      </td>
+                      <td style={{padding:"9px 10px"}}>{p.metodo||"—"}</td>
+                      <td style={{padding:"9px 10px",color:C.gray}}>{p.referencia||"—"}</td>
+                      <td style={{padding:"9px 10px",fontWeight:700,color:p.tipo==="cargo"?C.red:C.green}}>
+                        {money(p.monto)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab Estadías */}
+      {tabActiva === "estadias" && (
       <div style={card}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
           <div style={{fontSize:11,fontWeight:700,color:C.gray,letterSpacing:1.2,textTransform:"uppercase"}}>
@@ -182,6 +261,7 @@ export default function FichaHuesped() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

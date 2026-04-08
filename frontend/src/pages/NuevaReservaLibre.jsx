@@ -12,9 +12,10 @@ export default function NuevaReservaLibre() {
   const nav = useNavigate();
 
   // selección principal
-  const [tipo, setTipo] = useState("doble");
-  const [plan, setPlan] = useState("C1");
-  const [planes, setPlanes] = useState(["C1", "GK"]); // se cargan desde la API
+  const [tipo, setTipo] = useState("");
+  const [tipos, setTipos] = useState([]);
+  const [plan, setPlan] = useState("");
+  const [planes, setPlanes] = useState([]);
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
 
@@ -40,11 +41,22 @@ export default function NuevaReservaLibre() {
   const [cargandoPrecio, setCargandoPrecio] = useState(false);
   const [cargandoDisponibles, setCargandoDisponibles] = useState(false);
 
-  // Cargar planes dinámicos desde la API
+  // Cargar tipos de habitación y planes desde la API
   useEffect(() => {
-    axios.get("http://localhost:4000/api/tarifas/planes", { headers: getAuthHeaders() })
-      .then(({ data }) => { if (Array.isArray(data) && data.length) setPlanes(data); })
-      .catch(() => {}); // si falla, usa los defaults
+    axios.get("http://localhost:4000/api/tipos-habitacion", { headers: getAuthHeaders() })
+      .then(({ data }) => {
+        const activos = (data || []).filter(t => t.activo);
+        setTipos(activos);
+        if (activos.length > 0) setTipo(activos[0].nombre);
+      })
+      .catch(() => {});
+    axios.get("http://localhost:4000/api/planes", { headers: getAuthHeaders() })
+      .then(({ data }) => {
+        const activos = (data || []).filter(p => p.activo);
+        setPlanes(activos);
+        if (activos.length > 0) setPlan(activos[0].codigo);
+      })
+      .catch(() => {});
   }, []);
 
   const limpiarPrecio = () => {
@@ -172,10 +184,10 @@ export default function NuevaReservaLibre() {
             value={tipo}
             onChange={(e) => setTipo(e.target.value)}
           >
-            <option value="sencilla">Sencilla</option>
-            <option value="doble">Doble</option>
-            <option value="triple">Triple</option>
-            <option value="suite">Suite</option>
+            {tipos.length === 0
+              ? <option value="">Cargando tipos...</option>
+              : tipos.map(t => <option key={t.id} value={t.nombre}>{t.nombre}</option>)
+            }
           </select>
         </div>
 
@@ -186,7 +198,14 @@ export default function NuevaReservaLibre() {
             value={plan}
             onChange={(e) => setPlan(e.target.value)}
           >
-            {planes.map((p) => <option key={p} value={p}>{p}</option>)}
+            {planes.length === 0
+              ? <option value="">Sin planes — ve a Administración → Planes</option>
+              : planes.map(p => (
+                  <option key={p.codigo} value={p.codigo}>
+                    {p.codigo}{p.descripcion ? ` — ${p.descripcion}` : ""}
+                  </option>
+                ))
+            }
           </select>
         </div>
 

@@ -45,12 +45,13 @@ export default function Navbar() {
             <NavDropdown
               label="Reservas"
               open={openMenu === "reservas"}
-              active={isActive(["/reservas", "/rack"])}
+              active={isActive(["/reservas", "/rack", "/otas"])}
               onToggle={() => toggle("reservas")}
             >
-              <DropItem to="/rack"           label="Rack interactivo" onClose={close} />
+              <DropItem to="/rack"           label="Rack interactivo"  onClose={close} />
               <DropItem to="/reservas"       label="Lista de reservas" onClose={close} />
-              <DropItem to="/reservas/nueva" label="Crear reserva"    onClose={close} />
+              <DropItem to="/otas"           label="Canales OTA"       onClose={close} />
+              <DropItem to="/reservas/nueva" label="Crear reserva"     onClose={close} />
             </NavDropdown>
 
             {/* Recepcion */}
@@ -87,13 +88,13 @@ export default function Navbar() {
               <NavDropdown
                 label="Administracion"
                 open={openMenu === "admin"}
-                active={isActive(["/administracion", "/usuarios", "/config-hotel", "/otas"])}
+                active={isActive(["/administracion", "/usuarios", "/config-hotel"])}
                 onToggle={() => toggle("admin")}
               >
                 <DropItem to="/administracion" label="Habitaciones y tarifas" onClose={close} />
+                <DropItem to="/planes"         label="Planes tarifarios"      onClose={close} />
+                <DropItem to="/promociones"   label="Promociones"            onClose={close} />
                 <DropItem to="/usuarios"       label="Usuarios del sistema"   onClose={close} />
-                <hr className="dropdown-divider my-1" />
-                <DropItem to="/otas"           label="Canales OTA"          onClose={close} />
                 <hr className="dropdown-divider my-1" />
                 <DropItem to="/config-hotel"   label="Configuracion del hotel" onClose={close} />
               </NavDropdown>

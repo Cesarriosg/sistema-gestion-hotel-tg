@@ -22,15 +22,20 @@ export default function CargosReserva() {
   const [descripcion, setDescripcion] = useState("");
   const [guardando, setGuardando] = useState(false);
 
+  // Promociones
+  const [promos,        setPromos]        = useState([]);
+  const [promoSel,      setPromoSel]      = useState("");
+  const [aplicando,     setAplicando]     = useState(false);
+  const [promoMsg,      setPromoMsg]      = useState({ text: "", ok: false });
+
   const cargar = async () => {
     try {
       setLoading(true);
       const r = await axios.get(`${API}/api/reservas/${id}/finanzas`, {
         headers: getAuthHeaders(),
       });
-
       setReserva(r.data?.reserva || null);
-      setPagos(Array.isArray(r.data?.pagos) ? r.data.pagos : []);
+      setPagos(Array.isArray(r.data?.movimientos) ? r.data.movimientos : []);
     } catch (e) {
       console.error(e);
       alert(e?.response?.data?.message || "No se pudieron cargar los cargos.");
@@ -41,19 +46,39 @@ export default function CargosReserva() {
     }
   };
 
+  const cargarPromos = async () => {
+    try {
+      const r = await axios.get(`${API}/api/reservas/${id}/promociones-aplicables`, {
+        headers: getAuthHeaders(),
+      });
+      setPromos(r.data?.promociones || []);
+    } catch {
+      setPromos([]);
+    }
+  };
+
   useEffect(() => {
     cargar();
+    cargarPromos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  //  Cargos = pagos.tipo === 'cargo' (incluye manuales y auditoría)
+  // Cargos = tipo 'cargo' + descuentos
   const cargos = useMemo(() => {
-    return (pagos || []).filter((p) => String(p.tipo).toLowerCase() === "cargo");
+    return (pagos || []).filter((p) => ["cargo", "descuento"].includes(String(p.tipo).toLowerCase()));
   }, [pagos]);
 
   const totalCargos = useMemo(() => {
-    return cargos.reduce((acc, c) => acc + Number(c.monto || 0), 0);
-  }, [cargos]);
+    return (pagos || [])
+      .filter(p => p.tipo === "cargo")
+      .reduce((acc, c) => acc + Number(c.monto || 0), 0);
+  }, [pagos]);
+
+  const totalDescuentos = useMemo(() => {
+    return (pagos || [])
+      .filter(p => p.tipo === "descuento")
+      .reduce((acc, c) => acc + Number(c.monto || 0), 0);
+  }, [pagos]);
 
   const crearCargo = async () => {
     const m = Number(monto);
@@ -94,7 +119,29 @@ export default function CargosReserva() {
     }
   };
 
+  const aplicarPromocion = async () => {
+    if (!promoSel) return;
+    setPromoMsg({ text: "", ok: false });
+    setAplicando(true);
+    try {
+      const r = await axios.post(
+        `${API}/api/reservas/${id}/aplicar-promocion`,
+        { promocion_id: Number(promoSel) },
+        { headers: getAuthHeaders() }
+      );
+      const desc = r.data?.descuento_aplicado;
+      setPromoMsg({ text: `✓ Descuento de $${Number(desc).toLocaleString("es-CO")} aplicado correctamente.`, ok: true });
+      setPromoSel("");
+      await cargar();
+      await cargarPromos();
+    } catch (e) {
+      setPromoMsg({ text: e?.response?.data?.message || "Error al aplicar la promoción.", ok: false });
+    } finally {
+      setAplicando(false); }
+  };
+
   const etiquetaCargo = (c) => {
+    if (c.tipo === "descuento") return "DESCUENTO";
     const ref = String(c.referencia || "").toUpperCase();
     if (ref.startsWith("AUDITORIA ALOJAMIENTO")) return "AUDITORÍA";
     return "MANUAL";
@@ -138,6 +185,59 @@ export default function CargosReserva() {
         </div>
       )}
 
+      {/* ── Aplicar promoción ── */}
+      {reserva?.estado === "ocupada" && (
+        <div className="card shadow-sm mb-3" style={{ borderLeft: "4px solid #2563eb" }}>
+          <div className="card-body">
+            <h5 className="mb-1">Aplicar promoción / descuento</h5>
+            <div className="text-muted mb-3" style={{ fontSize: 12 }}>
+              El descuento se registra como crédito sobre esta reserva y reduce el saldo pendiente.
+            </div>
+
+            {promos.length === 0 ? (
+              <div className="alert alert-secondary py-2 mb-0" style={{ fontSize: 13 }}>
+                No hay promociones activas aplicables a este plan / tipo de habitación / noches.
+              </div>
+            ) : (
+              <div className="row g-2 align-items-end">
+                <div className="col-md-8">
+                  <Form.Label className="mb-1">Seleccionar promoción</Form.Label>
+                  <Form.Select value={promoSel} onChange={e => setPromoSel(e.target.value)}>
+                    <option value="">-- Seleccione una promoción --</option>
+                    {promos.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre}
+                        {p.tipo === "porcentaje"    && ` — ${p.valor}% desc.`}
+                        {p.tipo === "monto_fijo"    && ` — $${Number(p.valor).toLocaleString("es-CO")} desc.`}
+                        {p.tipo === "noches_gratis" && ` — ${p.valor} noche(s) gratis`}
+                        {" "}(ahorro estimado: ${Number(p.descuento_calculado || 0).toLocaleString("es-CO")})
+                      </option>
+                    ))}
+                  </Form.Select>
+                </div>
+                <div className="col-md-4 d-flex align-items-end">
+                  <Button
+                    className="w-100"
+                    variant="primary"
+                    onClick={aplicarPromocion}
+                    disabled={aplicando || !promoSel}
+                  >
+                    {aplicando ? "Aplicando..." : "Aplicar descuento"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {promoMsg.text && (
+              <div className={`alert py-2 mt-2 mb-0 ${promoMsg.ok ? "alert-success" : "alert-danger"}`}
+                style={{ fontSize: 13 }}>
+                {promoMsg.text}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="card shadow-sm mb-3">
         <div className="card-body">
           <h5 className="mb-2">Agregar cargo manual</h5>
@@ -175,9 +275,14 @@ export default function CargosReserva() {
 
       <div className="card shadow-sm">
         <div className="card-body">
-          <div className="d-flex justify-content-between align-items-center mb-2">
-            <h5 className="mb-0">Cargos registrados</h5>
-            <Badge bg="dark">Total cargos: {totalCargos.toLocaleString("es-CO")}</Badge>
+          <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+            <h5 className="mb-0">Cargos y descuentos</h5>
+            <div className="d-flex gap-2">
+              <Badge bg="dark">Cargos: ${totalCargos.toLocaleString("es-CO")}</Badge>
+              {totalDescuentos > 0 && (
+                <Badge bg="success">Descuentos: -${totalDescuentos.toLocaleString("es-CO")}</Badge>
+              )}
+            </div>
           </div>
 
           {loading ? (
@@ -200,13 +305,19 @@ export default function CargosReserva() {
                   {cargos.map((c) => (
                     <tr key={c.id}>
                       <td>
-                        <Badge bg={etiquetaCargo(c) === "AUDITORÍA" ? "primary" : "secondary"}>
+                        <Badge bg={
+                          etiquetaCargo(c) === "AUDITORÍA" ? "primary"
+                          : etiquetaCargo(c) === "DESCUENTO" ? "success"
+                          : "secondary"
+                        }>
                           {etiquetaCargo(c)}
                         </Badge>
                       </td>
                       <td>{fechaCargo(c)}</td>
                       <td>{c.referencia || ""}</td>
-                      <td>{Number(c.monto || 0).toLocaleString("es-CO")}</td>
+                      <td style={{ color: c.tipo === "descuento" ? "#16a34a" : undefined, fontWeight: 600 }}>
+                        {c.tipo === "descuento" ? "-" : ""}${Number(c.monto || 0).toLocaleString("es-CO")}
+                      </td>
                       <td>{c.metodo}</td>
                     </tr>
                   ))}

@@ -60,22 +60,17 @@ export const calcularTotalAlojamiento = async (client, { plan, tipoHabitacion, f
 
 /**
  * GET /api/facturacion/facturas
- * Opcionalmente filtra por rango de fecha_emision (?desde=YYYY-MM-DD&hasta=YYYY-MM-DD)
+ * Filtra por ?desde, ?hasta, ?estado
  */
 export const listarFacturas = async (req, res) => {
-  const { desde, hasta } = req.query;
+  const { desde, hasta, estado } = req.query;
 
   const params = [];
   let where = "WHERE 1=1";
 
-  if (desde) {
-    params.push(desde);
-    where += ` AND f.fecha_emision >= $${params.length}`;
-  }
-  if (hasta) {
-    params.push(hasta);
-    where += ` AND f.fecha_emision <= $${params.length}`;
-  }
+  if (desde) { params.push(desde); where += ` AND f.fecha_emision::date >= $${params.length}::date`; }
+  if (hasta) { params.push(hasta); where += ` AND f.fecha_emision::date <= $${params.length}::date`; }
+  if (estado) { params.push(estado); where += ` AND f.estado = $${params.length}`; }
 
   try {
     const q = `
@@ -87,9 +82,20 @@ export const listarFacturas = async (req, res) => {
         f.estado,
         r.fecha_inicio,
         r.fecha_fin,
+        r.plan,
         h.numero AS habitacion_numero,
         h.tipo   AS habitacion_tipo,
-        COALESCE(hu.nombre, '') AS huesped_nombre
+        COALESCE(
+          NULLIF(TRIM(CONCAT_WS(' ', hu.nombres, hu.primer_apellido, hu.segundo_apellido)),''),
+          NULLIF(TRIM(hu.nombre),''), ''
+        ) AS huesped_nombre,
+        COALESCE((SELECT SUM(p.monto) FROM pagos p WHERE p.reserva_id = r.id AND p.tipo IN ('pago','deposito')), 0) AS total_pagado,
+        CASE
+          WHEN f.estado = 'anulada' THEN 'anulada'
+          WHEN COALESCE((SELECT SUM(p.monto) FROM pagos p WHERE p.reserva_id = r.id AND p.tipo IN ('pago','deposito')),0) >= f.total THEN 'pagada'
+          WHEN COALESCE((SELECT SUM(p.monto) FROM pagos p WHERE p.reserva_id = r.id AND p.tipo IN ('pago','deposito')),0) > 0 THEN 'abonada'
+          ELSE 'pendiente'
+        END AS estado_pago
       FROM facturas f
       JOIN reservas r       ON r.id = f.reserva_id
       JOIN habitaciones h   ON h.id = r.habitacion_id
@@ -173,20 +179,33 @@ export const facturarReserva = async (req, res) => {
       return res.status(400).json({ message: "La reserva ya tiene una factura generada." });
     }
 
-    // 4) Debe tener al menos un pago/deposito (según tu regla actual)
+    // 4) Validar saldo = 0 antes de facturar
     const pagosRes = await client.query(
-      `SELECT COALESCE(SUM(monto),0) AS total_pagado
+      `SELECT
+         COALESCE(SUM(CASE WHEN tipo IN ('pago','deposito','descuento') THEN monto ELSE 0 END), 0) AS total_pagado,
+         COALESCE(SUM(CASE WHEN tipo = 'cargo' THEN monto ELSE 0 END), 0) AS total_cargos
        FROM pagos
        WHERE reserva_id = $1`,
       [reservaId]
     );
     const totalPagado = Number(pagosRes.rows?.[0]?.total_pagado || 0);
+    const totalCargosMovs = Number(pagosRes.rows?.[0]?.total_cargos || 0);
 
     if (totalPagado <= 0) {
       await client.query("ROLLBACK");
       return res.status(400).json({
         message: "Registra al menos un depósito/pago antes de facturar.",
       });
+    }
+
+    // Validar que el saldo sea exactamente 0 (sin diferencia mayor a 1 peso)
+    const saldoActual = totalCargosMovs - totalPagado;
+    if (Math.abs(saldoActual) >= 1) {
+      await client.query("ROLLBACK");
+      const msg = saldoActual > 0
+        ? `Saldo pendiente de $${Math.round(saldoActual).toLocaleString("es-CO")}. Registra el pago completo antes de facturar.`
+        : `El total pagado supera el valor de la estancia en $${Math.round(Math.abs(saldoActual)).toLocaleString("es-CO")}. Elimina el excedente antes de facturar.`;
+      return res.status(400).json({ message: msg });
     }
 
     // 5) Calcular alojamiento por tarifas (noche a noche)
@@ -306,39 +325,90 @@ export const obtenerFactura = async (req, res) => {
 
 /**
  * GET /api/facturacion/pagos
- * Listado básico de pagos/depositos/cargos para la pestaña "Pagos / depósitos / cargos"
+ * Listado de pagos/depositos/cargos — filtra por ?desde, ?hasta, ?metodo, ?tipo
  */
 export const listarPagos = async (req, res) => {
+  const { desde, hasta, metodo, tipo } = req.query;
+  const params = [];
+  const conds = ["1=1"];
+
+  if (desde) { params.push(desde); conds.push(`p.created_at::date >= $${params.length}::date`); }
+  if (hasta) { params.push(hasta); conds.push(`p.created_at::date <= $${params.length}::date`); }
+  if (metodo) { params.push(metodo); conds.push(`p.metodo = $${params.length}`); }
+  if (tipo)   { params.push(tipo);   conds.push(`p.tipo   = $${params.length}`); }
+
   try {
     const { rows } = await pool.query(`
       SELECT
-        p.id,
-        p.reserva_id,
-        p.tipo,
-        p.metodo,
-        p.monto,
+        p.id, p.reserva_id, p.tipo, p.metodo, p.monto, p.referencia,
         p.created_at,
-
-        r.id            AS reserva_id,
-        r.fecha_inicio,
-        r.fecha_fin,
-
-        h.numero        AS habitacion_numero,
-        h.tipo          AS habitacion_tipo,
-
-        COALESCE(hu.nombre, '') AS huesped_nombre
-
+        r.fecha_inicio, r.fecha_fin,
+        h.numero AS habitacion_numero, h.tipo AS habitacion_tipo,
+        COALESCE(
+          NULLIF(TRIM(CONCAT_WS(' ', hu.nombres, hu.primer_apellido, hu.segundo_apellido)),''),
+          NULLIF(TRIM(hu.nombre),''), ''
+        ) AS huesped_nombre
       FROM pagos p
       JOIN reservas r       ON r.id = p.reserva_id
       JOIN habitaciones h   ON h.id = r.habitacion_id
       LEFT JOIN huespedes hu ON hu.id = r.huesped_id
+      WHERE ${conds.join(" AND ")}
       ORDER BY p.created_at DESC
-    `);
+      LIMIT 500
+    `, params);
 
     res.json(rows);
   } catch (e) {
     console.error("listarPagos error:", e);
     res.status(500).json({ message: "Error al listar pagos." });
+  }
+};
+
+/**
+ * PUT /api/facturacion/facturas/:id/anular
+ * Anula una factura emitida y reactiva la posibilidad de facturar de nuevo
+ */
+export const anularFactura = async (req, res) => {
+  const { id } = req.params;
+  const { motivo } = req.body || {};
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const fq = await client.query(
+      `SELECT id, estado, reserva_id FROM facturas WHERE id = $1 LIMIT 1`, [id]
+    );
+    if (!fq.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Factura no encontrada." });
+    }
+    const f = fq.rows[0];
+    if (f.estado === "anulada") {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ message: "La factura ya está anulada." });
+    }
+    await client.query(
+      `UPDATE facturas SET estado='anulada', updated_at=NOW() WHERE id=$1`, [id]
+    );
+    // Revertir marca facturada en la reserva para poder volver a facturar
+    await client.query(
+      `UPDATE reservas SET facturada=false, updated_at=NOW() WHERE id=$1`, [f.reserva_id]
+    );
+    // Registrar en auditoría si hay tabla
+    await client.query(
+      `INSERT INTO auditoria (accion, tabla, registro_id, detalle, created_at)
+       VALUES ('anular_factura', 'facturas', $1, $2, NOW())
+       ON CONFLICT DO NOTHING`,
+      [id, motivo ? `Motivo: ${motivo}` : "Anulada por administrador"]
+    ).catch(() => {}); // no falla si no existe tabla auditoria
+
+    await client.query("COMMIT");
+    return res.json({ message: "Factura anulada correctamente." });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error("anularFactura error:", e);
+    return res.status(500).json({ message: "Error al anular la factura." });
+  } finally {
+    client.release();
   }
 };
 
@@ -348,6 +418,57 @@ export const listarPagos = async (req, res) => {
  * Crea un pago/deposito/cargo asociado a una reserva
  */
 // POST /api/reservas/:id/pagos
+/**
+ * DELETE /api/reservas/:id/pagos/:pagoId
+ * Elimina un pago/depósito siempre que la reserva no tenga factura emitida.
+ */
+export const eliminarPago = async (req, res) => {
+  const reservaId = Number(req.params.id);
+  const pagoId    = Number(req.params.pagoId);
+
+  if (!reservaId || !pagoId) {
+    return res.status(400).json({ message: "Parámetros inválidos." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Verificar que no existe factura emitida para esta reserva
+    const fRes = await client.query(
+      `SELECT id FROM facturas WHERE reserva_id = $1 AND estado = 'emitida' LIMIT 1`,
+      [reservaId]
+    );
+    if (fRes.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        message: "No se puede eliminar el pago: ya existe una factura emitida para esta reserva.",
+      });
+    }
+
+    // Verificar que el pago pertenece a esta reserva
+    const pRes = await client.query(
+      `SELECT id, tipo FROM pagos WHERE id = $1 AND reserva_id = $2`,
+      [pagoId, reservaId]
+    );
+    if (!pRes.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Pago no encontrado en esta reserva." });
+    }
+
+    await client.query(`DELETE FROM pagos WHERE id = $1`, [pagoId]);
+
+    await client.query("COMMIT");
+    return res.json({ message: "Pago eliminado correctamente." });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error("eliminarPago error:", e);
+    return res.status(500).json({ message: "Error al eliminar el pago." });
+  } finally {
+    client.release();
+  }
+};
+
 export const registrarPago = async (req, res) => {
   const { id } = req.params;
   const { monto, metodo, tipo, descripcion, referencia, fecha } = req.body;

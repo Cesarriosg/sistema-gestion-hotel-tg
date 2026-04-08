@@ -710,7 +710,7 @@ const buildBloqueoEnd = (fechaFin, startISO) => {
   // ✅ Usamos hacerCheckout para que no salga no-unused-vars
   const hacerCheckout = () => {
     if (!eventoSel || eventoSel.kind !== "reserva") return;
-    navigate(`/reservas/${eventoSel.id}`);
+    navigate(`/facturacion/${eventoSel.id}`);
   };
 
   const verRegistro = () => {

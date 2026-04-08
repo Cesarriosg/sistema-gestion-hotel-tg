@@ -7,6 +7,7 @@ import {
   reporteHuespedesFrecuentes,
   reporteResumen,
   reporteMeta,
+  reporteHabitaciones,
 } from "../controllers/reportes.controller.js";
 
 const router = Router();
@@ -16,6 +17,7 @@ router.get("/ocupacion",            verificarToken, reporteOcupacion);
 router.get("/ingresos",             verificarToken, reporteIngresos);
 router.get("/huespedes-frecuentes", verificarToken, reporteHuespedesFrecuentes);
 
-router.get("/meta", verificarToken, reporteMeta);
+router.get("/meta",          verificarToken, reporteMeta);
+router.get("/habitaciones",  verificarToken, reporteHabitaciones);
 
 export default router;

@@ -9,6 +9,7 @@ import {
   actualizarTipoHabitacionDeHab,
   cambiarActivoHabitacion,
   actualizarPlanYTarifaHabitacion,
+  actualizarNotasHabitacion,
 } from "../controllers/habitaciones.controller.js";
 
 import { listarHabitacionesDisponibles } from "../controllers/reservas.controller.js";
@@ -31,5 +32,6 @@ router.put("/:id/plan-tarifa", verificarToken, actualizarPlanYTarifaHabitacion);
 
 // estado operativo
 router.put("/:id/estado", verificarToken, actualizarEstadoHabitacion);
+router.put("/:id/notas", verificarToken, actualizarNotasHabitacion);
 
 export default router;

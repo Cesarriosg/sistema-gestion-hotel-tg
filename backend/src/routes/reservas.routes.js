@@ -17,13 +17,15 @@ import {
   listarHuespedesDeReserva,
   obtenerHuespedesAsociadosReserva,
   actualizarAcompanantesReserva,
-  listarLlegadasDelDia,      
-  marcarNoShow,              
-  extenderEstadia,           
-  obtenerHistorialReserva,   
+  listarLlegadasDelDia,
+  marcarNoShow,
+  extenderEstadia,
+  obtenerHistorialReserva,
+  promocionesAplicables,
+  aplicarPromocion,
 } from "../controllers/reservas.controller.js";
 
-import { registrarPago } from "../controllers/facturacion.controller.js";
+import { registrarPago, facturarReserva, eliminarPago } from "../controllers/facturacion.controller.js";
 
 const router = Router();
 
@@ -43,11 +45,15 @@ router.get("/:id/finanzas",              obtenerFinanzasReserva);
 router.get("/:id/huespedes",             listarHuespedesDeReserva);
 router.get("/:id/huespedes-asociados",   obtenerHuespedesAsociadosReserva);
 router.get("/:id/historial",             obtenerHistorialReserva);   // HU-R11
+router.get("/:id/promociones-aplicables",promocionesAplicables);
+router.post("/:id/aplicar-promocion",    aplicarPromocion);
 router.get("/:id/registro-hotelero",     generarRegistroHotelero);   // PDF
 router.get("/:id",                       obtenerReserva);
 
 router.post("/",                         crearReservaOWalkIn);
 router.post("/:id/pagos",                registrarPago);
+router.delete("/:id/pagos/:pagoId",      eliminarPago);
+router.post("/:id/facturar",             facturarReserva);
 router.post("/:id/checkin",              checkinReserva);
 router.post("/:id/checkout",             checkoutReserva);
 router.post("/:id/no-show",              marcarNoShow);              

@@ -48,7 +48,8 @@ export default function NuevaReserva() {
   const [tipoErr, setTipoErr] = useState("");
 
   //  : plan predeterminado
-  const [plan, setPlan] = useState("C1");
+  const [plan, setPlan] = useState("");
+  const [planes, setPlanes] = useState([]);
 
   //    titular con autocompletar
   const [titular, setTitular] = useState({
@@ -125,6 +126,17 @@ export default function NuevaReserva() {
     cargarTipoHabitacion();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [habNumero]);
+
+  useEffect(() => {
+    axios.get(`${API}/api/planes`, { headers: getAuthHeaders() })
+      .then(({ data }) => {
+        const activos = (data || []).filter(p => p.activo);
+        setPlanes(activos);
+        if (activos.length > 0 && !plan) setPlan(activos[0].codigo);
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   //   autocompletar huésped por tipo_documento + documento
   useEffect(() => {
@@ -485,8 +497,14 @@ export default function NuevaReserva() {
                       onChange={(e) => setPlan(e.target.value)}
                       disabled={bloqueadoPorTipo}
                     >
-                      <option value="C1">Clásico 1 (C1)</option>
-                      <option value="GK">Gold King (GK)</option>
+                      {planes.length === 0
+                        ? <option value="">Sin planes — ve a Administración → Planes</option>
+                        : planes.map(p => (
+                            <option key={p.codigo} value={p.codigo}>
+                              {p.codigo}{p.descripcion ? ` — ${p.descripcion}` : ""}
+                            </option>
+                          ))
+                      }
                     </Form.Select>
                   </Form.Group>
 

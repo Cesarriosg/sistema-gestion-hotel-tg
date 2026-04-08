@@ -108,9 +108,9 @@ export default function NuevoWalkIn() {
       const { data } = await axios.get(`${API}/api/habitaciones`, {
         headers: getAuthHeaders(),
       });
-      // Filtramos solo disponibles (el backend ya puede filtrar por estado real)
+      // Filtramos solo disponibles usando estado_operativo (calculado por el backend)
       const disp = (data || []).filter(
-        (h) => h.activo && ["disponible"].includes(h.estado)
+        (h) => h.activo && (h.estado_operativo || h.estado_base) === "disponible"
       );
       setHabitaciones(disp);
     } catch (e) {
@@ -126,8 +126,14 @@ export default function NuevoWalkIn() {
 
   // Cargar planes dinámicos
   useEffect(() => {
-    axios.get(`${API}/api/tarifas/planes`, { headers: getAuthHeaders() })
-      .then(({ data }) => { if (Array.isArray(data) && data.length) setPlanes(data); })
+    axios.get(`${API}/api/planes`, { headers: getAuthHeaders() })
+      .then(({ data }) => {
+        const activos = (data || []).filter(p => p.activo);
+        if (activos.length) {
+          setPlanes(activos);
+          setPlan(activos[0].codigo);
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -524,7 +530,11 @@ export default function NuevoWalkIn() {
                     <label className="form-label">Plan</label>
                     <select className="form-select" value={plan}
                       onChange={(e) => setPlan(e.target.value)}>
-                      {planes.map((p) => <option key={p} value={p}>{p}</option>)}
+                      {planes.map((p) => (
+                        <option key={p.codigo} value={p.codigo}>
+                          {p.codigo}{p.descripcion ? ` — ${p.descripcion}` : ""}
+                        </option>
+                      ))}
                     </select>
                   </div>
 

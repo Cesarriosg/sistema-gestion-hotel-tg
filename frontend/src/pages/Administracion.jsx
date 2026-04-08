@@ -32,6 +32,12 @@ function TabHabitaciones({ planes }) {
   const [nuevoTipo,     setNuevoTipo]     = useState("");
   const [nuevaCap,      setNuevaCap]      = useState(2);
   const [guardando,     setGuardando]     = useState(false);
+  // Notas por habitación
+  const [showNotas,     setShowNotas]     = useState(false);
+  const [notasHabId,    setNotasHabId]    = useState(null);
+  const [notasHabNum,   setNotasHabNum]   = useState("");
+  const [notasTexto,    setNotasTexto]    = useState("");
+  const [guardandoNotas,setGuardandoNotas]= useState(false);
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -41,7 +47,7 @@ function TabHabitaciones({ planes }) {
       setHabitaciones(lista);
       const next = {};
       lista.forEach((h) => {
-        next[h.id] = { plan: h.plan ?? "C1", tarifa: h.tarifa_actual ?? "", saving: false };
+        next[h.id] = { saving: false };
       });
       setEdits(next);
     } catch (e) { console.error(e); }
@@ -60,6 +66,19 @@ function TabHabitaciones({ planes }) {
   const cambiarTipo   = async (id, tipo)   => { try { await habitacionesService.actualizar(id, { tipo }); await cargar(); } catch (e) { alert(e?.response?.data?.message || "Error al cambiar tipo.");   } };
   const cambiarEstado = async (id, estado) => { try { await habitacionesService.cambiarEstado(id, { estado }); await cargar(); } catch (e) { alert(e?.response?.data?.message || "Error al cambiar estado."); } };
   const toggleActivo  = async (id, activo) => { try { await habitacionesService.actualizar(id, { activo: !activo }); await cargar(); } catch (e) { alert(e?.response?.data?.message || "Error."); } };
+
+  const abrirNotas = (h) => {
+    setNotasHabId(h.id); setNotasHabNum(h.numero);
+    setNotasTexto(h.notas || ""); setShowNotas(true);
+  };
+  const guardarNotas = async () => {
+    setGuardandoNotas(true);
+    try {
+      await habitacionesService.actualizarNotas(notasHabId, notasTexto);
+      setShowNotas(false); await cargar();
+    } catch (e) { alert(e?.response?.data?.message || "Error al guardar notas."); }
+    finally { setGuardandoNotas(false); }
+  };
 
   const guardarPlanTarifa = async (habId) => {
     const row = edits[habId] || {};
@@ -92,7 +111,7 @@ function TabHabitaciones({ planes }) {
     reservada:     <Badge bg="info">Reservada</Badge>,
     mantenimiento: <Badge bg="warning" text="dark">Mantenimiento</Badge>,
     fuera_servicio:<Badge bg="secondary">Fuera servicio</Badge>,
-  }[e] || <Badge bg="light" text="dark">{e}</Badge>);
+  }[e] || <Badge bg="light" text="dark">{e || "—"}</Badge>);
 
   const lista = useMemo(() => habitaciones.filter((h) => {
     const pasaTxt = `${h.numero} ${h.tipo}`.toLowerCase().includes(filtroTexto.toLowerCase());
@@ -107,7 +126,7 @@ function TabHabitaciones({ planes }) {
         <div>
           <h4 className="mb-0" style={{ fontWeight: 700 }}>Habitaciones</h4>
           <div className="text-muted" style={{ fontSize: 13 }}>
-            Tipo, estado, plan y tarifa base. El plan determina que tarifa se aplica en reservas.
+            Tipo y estado de cada habitación. El plan se asigna al crear la reserva, no a la habitación.
           </div>
         </div>
         <div className="d-flex gap-2">
@@ -139,77 +158,79 @@ function TabHabitaciones({ planes }) {
           <table className="table table-sm align-middle">
             <thead className="table-dark">
               <tr>
-                <th>#</th><th>Numero</th><th>Tipo</th><th>Estado</th><th>Activa</th>
-                <th>Plan asignado</th><th>Tarifa base</th><th>Guardar</th><th>Cambiar estado</th>
+                <th>#</th><th>Número</th><th>Tipo</th>
+                <th>Estado hoy</th><th>Estado base</th>
+                <th>Activa</th><th>Notas</th><th>Cambiar estado base</th>
               </tr>
             </thead>
             <tbody>
               {lista.length === 0
-                ? <tr><td colSpan={9} className="text-center text-muted">Sin resultados.</td></tr>
-                : lista.map((h, i) => {
-                    const row = edits[h.id] || { plan: "C1", tarifa: "", saving: false };
-                    return (
-                      <tr key={h.id}>
-                        <td className="text-muted">{i + 1}</td>
-                        <td className="fw-semibold">{h.numero}</td>
-                        <td>
-                          <select className="form-select form-select-sm" value={h.tipo}
-                            onChange={(e) => cambiarTipo(h.id, e.target.value)} style={{ minWidth: 130 }}>
-                            {tipos.length > 0
-                              ? tipos.map((t) => <option key={t.codigo} value={t.codigo}>{t.nombre} ({t.codigo})</option>)
-                              : <option value={h.tipo}>{h.tipo}</option>}
-                          </select>
-                        </td>
-                        <td>{getBadge(h.estado)}</td>
-                        <td>
-                          <span className="badge" style={{ background: h.activo ? "#16a34a" : "#6b7280", cursor: "pointer" }}
-                            onClick={() => toggleActivo(h.id, h.activo)}>
-                            {h.activo ? "Si" : "No"}
-                          </span>
-                        </td>
-                        <td>
-                          {/* Selector de plan dinámico: incluye planes existentes + opción de escribir uno nuevo */}
-                          <select className="form-select form-select-sm" style={{ minWidth: 110 }}
-                            value={row.plan}
-                            onChange={(e) => setEdits((p) => ({ ...p, [h.id]: { ...p[h.id], plan: e.target.value } }))}>
-                            {/* Planes existentes en el sistema */}
-                            {planes.length > 0
-                              ? planes.map((pl) => <option key={pl} value={pl}>{pl}</option>)
-                              : <>
-                                  <option value="C1">C1</option>
-                                  <option value="GK">GK</option>
-                                </>}
-                          </select>
-                        </td>
-                        <td>
-                          <input type="number" className="form-control form-control-sm" style={{ minWidth: 110 }}
-                            value={row.tarifa}
-                            onChange={(e) => setEdits((p) => ({ ...p, [h.id]: { ...p[h.id], tarifa: e.target.value } }))}
-                            placeholder="Ej: 150000" />
-                        </td>
-                        <td>
-                          <Button size="sm" variant="primary" disabled={row.saving} onClick={() => guardarPlanTarifa(h.id)}>
-                            {row.saving ? "..." : "Guardar"}
+                ? <tr><td colSpan={7} className="text-center text-muted">Sin resultados.</td></tr>
+                : lista.map((h, i) => (
+                    <tr key={h.id}>
+                      <td className="text-muted">{i + 1}</td>
+                      <td className="fw-semibold">{h.numero}</td>
+                      <td>
+                        <select className="form-select form-select-sm" value={h.tipo}
+                          onChange={(e) => cambiarTipo(h.id, e.target.value)} style={{ minWidth: 130 }}>
+                          {tipos.length > 0
+                            ? tipos.map((t) => <option key={t.codigo} value={t.codigo}>{t.nombre} ({t.codigo})</option>)
+                            : <option value={h.tipo}>{h.tipo}</option>}
+                        </select>
+                      </td>
+                      <td>{getBadge(h.estado_operativo)}</td>
+                      <td>{getBadge(h.estado_base)}</td>
+                      <td>
+                        <span className="badge" style={{ background: h.activo ? "#16a34a" : "#6b7280", cursor: "pointer" }}
+                          onClick={() => toggleActivo(h.id, h.activo)}>
+                          {h.activo ? "Sí" : "No"}
+                        </span>
+                      </td>
+                      <td>
+                        <Button size="sm"
+                          variant={h.notas ? "outline-warning" : "outline-secondary"}
+                          onClick={() => abrirNotas(h)}
+                          title={h.notas || "Sin notas"}
+                        >
+                          {h.notas ? "✏️ Ver" : "+ Notas"}
+                        </Button>
+                      </td>
+                      <td>
+                        <div className="d-flex gap-1 flex-wrap">
+                          <Button size="sm" variant="success"  onClick={() => cambiarEstado(h.id, "disponible")}>Disponible</Button>
+                          <Button size="sm" variant="warning"  onClick={() => cambiarEstado(h.id, "mantenimiento")}>Mant.</Button>
+                          <Button size="sm" variant="secondary" onClick={() => cambiarEstado(h.id, "fuera_servicio")}>F. Servicio</Button>
+                          <Button size="sm" variant="outline-danger" onClick={() => toggleActivo(h.id, h.activo)}>
+                            {h.activo ? "Desactivar" : "Activar"}
                           </Button>
-                        </td>
-                        <td>
-                          <div className="d-flex gap-1 flex-wrap">
-                            <Button size="sm" variant="success"  onClick={() => cambiarEstado(h.id, "disponible")}>Disponible</Button>
-                            <Button size="sm" variant="warning"  onClick={() => cambiarEstado(h.id, "mantenimiento")}>Mant.</Button>
-                            <Button size="sm" variant="secondary" onClick={() => cambiarEstado(h.id, "fuera_servicio")}>F. Servicio</Button>
-                            <Button size="sm" variant="outline-danger" onClick={() => toggleActivo(h.id, h.activo)}>
-                              {h.activo ? "Desactivar" : "Activar"}
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
+                        </div>
+                      </td>
+                    </tr>
+                  ))
               }
             </tbody>
           </table>
         </div>
       )}
+
+      {/* Modal notas por habitación */}
+      <Modal show={showNotas} onHide={() => setShowNotas(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Notas — Hab. {notasHabNum}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form.Label>Comentarios internos / estado físico</Form.Label>
+          <Form.Control as="textarea" rows={4} value={notasTexto}
+            onChange={e => setNotasTexto(e.target.value)}
+            placeholder="Ej: Grifo roto, pintura deteriorada, TV dañada..." />
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowNotas(false)} disabled={guardandoNotas}>Cancelar</Button>
+          <Button variant="primary" onClick={guardarNotas} disabled={guardandoNotas}>
+            {guardandoNotas ? <><Spinner animation="border" size="sm" className="me-1" />Guardando...</> : "Guardar notas"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       <Modal show={showCrear} onHide={() => setShowCrear(false)} centered>
         <Modal.Header closeButton><Modal.Title>Crear habitacion</Modal.Title></Modal.Header>

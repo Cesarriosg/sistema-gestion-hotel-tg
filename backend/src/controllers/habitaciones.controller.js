@@ -35,17 +35,25 @@ export const listarHabitaciones = async (req, res) => {
 
     const sql = `
   SELECT
-    h.id, h.numero, h.tipo, h.estado, h.capacidad, h.activo, h.updated_at,
-    (
-      SELECT t.precio
-      FROM tarifas t
-      WHERE t.plan = t.plan
-        AND lower(trim(t.tipo_habitacion)) = lower(trim(h.tipo))
-        AND t.fecha_inicio <= CURRENT_DATE
-        AND t.fecha_fin >= CURRENT_DATE
-      ORDER BY t.fecha_inicio DESC
-      LIMIT 1
-    ) AS tarifa_actual
+    h.id, h.numero, h.tipo, h.estado AS estado_base, h.capacidad, h.activo, h.updated_at,
+    -- Estado operativo hoy: si hay reserva/ocupación activa hoy según fecha sistema, prima sobre estado_base
+    COALESCE(
+      (
+        SELECT r.estado
+        FROM reservas r
+        WHERE r.habitacion_id = h.id
+          AND r.estado IN ('ocupada', 'reservada')
+          AND r.fecha_inicio <= (
+            SELECT COALESCE(fecha_sistema, CURRENT_DATE) FROM configuracion LIMIT 1
+          )
+          AND r.fecha_fin > (
+            SELECT COALESCE(fecha_sistema, CURRENT_DATE) FROM configuracion LIMIT 1
+          )
+        ORDER BY r.fecha_inicio DESC
+        LIMIT 1
+      ),
+      h.estado
+    ) AS estado_operativo
   FROM habitaciones h
   ${where}
   ORDER BY h.numero ASC
@@ -275,6 +283,25 @@ export const actualizarEstadoHabitacion = async (req, res) => {
   } catch (e) {
     console.error("actualizarEstadoHabitacion error:", e);
     return res.status(500).json({ message: "Error al actualizar estado de habitación." });
+  }
+};
+
+// PUT /api/habitaciones/:id/notas
+export const actualizarNotasHabitacion = async (req, res) => {
+  const { id } = req.params;
+  const { notas } = req.body || {};
+  try {
+    await pool.query(`ALTER TABLE habitaciones ADD COLUMN IF NOT EXISTS notas TEXT`);
+    const upd = await pool.query(
+      `UPDATE habitaciones SET notas=$1, updated_at=NOW() WHERE id=$2
+       RETURNING id, numero, notas`,
+      [notas || null, id]
+    );
+    if (!upd.rows.length) return res.status(404).json({ message: "Habitación no encontrada." });
+    return res.json(upd.rows[0]);
+  } catch (e) {
+    console.error("actualizarNotasHabitacion error:", e);
+    return res.status(500).json({ message: "Error al guardar notas." });
   }
 };
 

@@ -283,3 +283,48 @@ export const reporteMeta = async (req, res) => {
     res.status(500).json({ message: "Error al obtener metadatos." });
   }
 };
+
+export const reporteHabitaciones = async (req, res) => {
+  const { desde, hasta } = req.query;
+  const fechaDesde = desde || dayjs().subtract(30, "day").format("YYYY-MM-DD");
+  const fechaHasta = hasta || dayjs().format("YYYY-MM-DD");
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         h.id,
+         h.numero,
+         h.tipo,
+         h.activo,
+         COUNT(DISTINCT r.id) FILTER (WHERE r.fecha_inicio::date BETWEEN $1::date AND $2::date)::int AS total_reservas,
+         COALESCE(SUM(
+           GREATEST(0, (LEAST(r.fecha_fin::date, $2::date + 1) - GREATEST(r.fecha_inicio::date, $1::date)))
+         ) FILTER (WHERE r.estado IN ('ocupada','finalizada')), 0)::int AS noches_ocupadas,
+         COALESCE(SUM(p.monto) FILTER (WHERE p.tipo IN ('pago','deposito')), 0)::numeric AS ingresos_generados,
+         (($2::date - $1::date) + 1) AS dias_periodo
+       FROM habitaciones h
+       LEFT JOIN reservas r ON r.habitacion_id = h.id
+         AND r.estado IN ('ocupada','finalizada')
+         AND r.fecha_inicio::date <= $2::date
+         AND r.fecha_fin::date   >= $1::date
+       LEFT JOIN pagos p ON p.reserva_id = r.id
+       WHERE h.activo = true
+       GROUP BY h.id, h.numero, h.tipo, h.activo
+       ORDER BY h.numero ASC`,
+      [fechaDesde, fechaHasta]
+    );
+
+    const diasPeriodo = rows[0]?.dias_periodo || 1;
+    const result = rows.map(r => ({
+      ...r,
+      ocupacion_pct: diasPeriodo > 0
+        ? Math.min(100, Math.round((r.noches_ocupadas / diasPeriodo) * 100))
+        : 0,
+    }));
+
+    res.json({ desde: fechaDesde, hasta: fechaHasta, habitaciones: result });
+  } catch (e) {
+    console.error("reporteHabitaciones error:", e);
+    res.status(500).json({ message: "Error al generar reporte por habitación." });
+  }
+};

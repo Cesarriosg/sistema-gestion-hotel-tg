@@ -42,7 +42,7 @@ export default function CierreDia() {
   const cargarPreview = async () => {
     setCargandoPreview(true); setErrPreview(""); setPreview(null);
     try {
-      const { data } = await hotelService.fechaSistema();
+      const { data } = await hotelService.previewCierre();
       setPreview(data);
     } catch (e) {
       setErrPreview(e?.response?.data?.message || "No se pudo cargar el preview.");
@@ -87,7 +87,7 @@ export default function CierreDia() {
         <Card.Body>
           <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
             <div>
-              <h3 className="mb-1">🌙 Cierre de Día</h3>
+              <h3 className="mb-1"> Cierre de Día</h3>
               <p className="text-muted mb-0" style={{ fontSize: 13 }}>
                 Genera los cargos de alojamiento del día operativo y avanza la fecha del sistema.
               </p>
@@ -257,7 +257,7 @@ export default function CierreDia() {
       {/* ── Botón ejecutar cierre ─────────────────────────────────────────── */}
       <Card className="shadow-sm border-warning">
         <Card.Body>
-          <h5 className="mb-1">⚡ Ejecutar Cierre de Día</h5>
+          <h5 className="mb-1"> Ejecutar Cierre de Día</h5>
           <p className="text-muted mb-3" style={{ fontSize: 13 }}>
             Al ejecutar el cierre, se generarán los cargos de alojamiento para todas las habitaciones
             ocupadas y la fecha operativa avanzará automáticamente al día siguiente.
@@ -271,7 +271,7 @@ export default function CierreDia() {
           >
             {ejecutando
               ? <><Spinner animation="border" size="sm" className="me-2" />Ejecutando cierre...</>
-              : `🌙 Ejecutar cierre del día ${dayjs(fechaOp).format("DD/MM/YYYY")}`}
+              : `Ejecutar cierre del día ${dayjs(fechaOp).format("DD/MM/YYYY")}`}
           </Button>
         </Card.Body>
       </Card>
@@ -279,7 +279,7 @@ export default function CierreDia() {
       {/* ══ MODAL CONFIRMACIÓN ════════════════════════════════════════════════ */}
       <Modal show={showConfirm} onHide={() => setShowConfirm(false)} centered>
         <Modal.Header closeButton>
-          <Modal.Title>🌙 Confirmar cierre de día</Modal.Title>
+          <Modal.Title>Confirmar cierre de día</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <p>Vas a ejecutar el cierre del día operativo <strong>{dayjs(fechaOp).format("DD/MM/YYYY")}</strong>.</p>

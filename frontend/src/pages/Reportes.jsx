@@ -181,11 +181,26 @@ export default function Reportes() {
     finally { setCargF(false); }
   },[]);
 
+  // ── POR HABITACIÓN ─────────────────────────────────────────────────────────
+  const [hDesde,setHDesde]=useState(hace30); const [hHasta,setHHasta]=useState(hoy);
+  const [habs,setHabs]=useState(null); const [cargH,setCargH]=useState(false); const [errH,setErrH]=useState("");
+  const refH = useRef(null);
+
+  const cargarHabs = useCallback(async () => {
+    setCargH(true); setErrH("");
+    try {
+      const {data} = await reportesService.habitaciones({desde:hDesde,hasta:hHasta});
+      setHabs(data);
+    } catch(e) { setErrH(e?.response?.data?.message||"Error."); }
+    finally { setCargH(false); }
+  },[hDesde,hHasta]);
+
   const onTab = (k) => {
     setTab(k);
-    if (k==="ocupacion" && !ocup) cargarOcup();
-    if (k==="ingresos"  && !ingr) cargarIngr();
-    if (k==="frecuentes"&& !frec) cargarFrec();
+    if (k==="ocupacion"    && !ocup) cargarOcup();
+    if (k==="ingresos"     && !ingr) cargarIngr();
+    if (k==="frecuentes"   && !frec) cargarFrec();
+    if (k==="habitaciones" && !habs) cargarHabs();
   };
 
   return (
@@ -386,6 +401,60 @@ export default function Reportes() {
                             <td>{fmt(h.primera_estadia)}</td>
                             <td>{fmt(h.ultima_estadia)}</td>
                             <td className="fw-semibold text-success">{money(h.total_pagado)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </div>
+                </Card.Body>
+              </Card>
+            </div>
+          ) : null}
+        </Tab>
+
+        {/* ── POR HABITACIÓN ────────────────────────────────────────────── */}
+        <Tab eventKey="habitaciones" title="Por habitación">
+          <FiltroFechas desde={hDesde} hasta={hHasta} onDesde={setHDesde} onHasta={setHHasta}
+            onAplicar={cargarHabs} cargando={cargH} />
+          {errH && <Alert variant="warning">{errH}</Alert>}
+          {cargH ? <div className="text-center py-4"><Spinner animation="border"/></div>
+          : habs ? (
+            <div ref={refH}>
+              <div className="d-flex justify-content-end mb-2 gap-2">
+                <BotonesExport
+                  onPDF={() => pdfExport(refH,"Estadísticas por habitación")}
+                  onExcel={() => excelExport(habs.habitaciones,"habitaciones",
+                    [["numero","Habitación"],["tipo","Tipo"],["total_reservas","Reservas"],
+                     ["noches_ocupadas","Noches ocup."],["ocupacion_pct","Ocup. %"],["ingresos_generados","Ingresos COP"]])}
+                  dis={cargH || !habs}
+                />
+              </div>
+              <Card style={{ border:"1px solid #e8edf2" }}>
+                <Card.Body>
+                  <div className="table-responsive">
+                    <Table size="sm" className="align-middle mb-0" hover>
+                      <thead className="table-dark">
+                        <tr>
+                          <th>Habitación</th><th>Tipo</th><th>Reservas</th>
+                          <th>Noches ocupadas</th><th>% Ocupación</th><th>Ingresos generados</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {habs.habitaciones.map(h => (
+                          <tr key={h.id}>
+                            <td className="fw-semibold">Hab. {h.numero}</td>
+                            <td>{h.tipo}</td>
+                            <td className="text-center">{h.total_reservas}</td>
+                            <td className="text-center">{h.noches_ocupadas}</td>
+                            <td>
+                              <div className="d-flex align-items-center gap-2">
+                                <div className="progress flex-grow-1" style={{ height:8 }}>
+                                  <div className="progress-bar bg-primary" style={{ width:`${h.ocupacion_pct}%` }}/>
+                                </div>
+                                <span style={{ fontSize:12, minWidth:34 }}>{h.ocupacion_pct}%</span>
+                              </div>
+                            </td>
+                            <td className="fw-semibold text-success">{money(h.ingresos_generados)}</td>
                           </tr>
                         ))}
                       </tbody>

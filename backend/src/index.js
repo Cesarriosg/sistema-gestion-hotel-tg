@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import cors from "cors";
 import http from "http";
 import { Server as SocketIOServer } from "socket.io";
+import { pool } from "./config/database.js";
 
 // Rutas
 import hotelRoutes from "./routes/hotel.routes.js";
@@ -23,6 +24,8 @@ import usuariosRoutes from "./routes/usuarios.routes.js";
 import otasRoutes      from "./routes/otas.routes.js";
 import reportesRoutes  from "./routes/reportes.routes.js";
 import tarifasRoutes   from "./routes/tarifas.routes.js";
+import planesRoutes       from "./routes/planes.routes.js";
+import promocionesRoutes  from "./routes/promociones.routes.js";
 
 dotenv.config();
 
@@ -30,11 +33,14 @@ dotenv.config();
 const app = express();
 
 // Middlewares
-app.use(cors({
+const corsOptions = {
   origin: "http://localhost:3000",
-  methods: ["GET","POST","PUT","DELETE"],
-  credentials: true
-}));
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+};
+app.use(cors(corsOptions));
+app.options("/{*path}", cors(corsOptions)); // preflight para todas las rutas
 
 app.use(express.json());
 
@@ -45,7 +51,8 @@ const server = http.createServer(app);
 const io = new SocketIOServer(server, {
   cors: {
     origin: "http://localhost:3000",
-    methods: ["GET","POST","PUT","DELETE"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   },
 });
@@ -94,8 +101,28 @@ app.use("/api/usuarios", usuariosRoutes);
 app.use("/api/otas",      otasRoutes);
 app.use("/api/reportes", reportesRoutes);
 app.use("/api/tarifas",  tarifasRoutes);
+app.use("/api/planes",      planesRoutes);
+app.use("/api/promociones", promocionesRoutes);
 
 const PORT = process.env.PORT || 4000;
+
+// Migración: ampliar CHECK constraint de pagos para incluir 'descuento'
+(async () => {
+  const client = await pool.connect();
+  try {
+    await client.query("ALTER TABLE pagos DROP CONSTRAINT IF EXISTS pagos_tipo_check");
+    await client.query(`
+      ALTER TABLE pagos
+      ADD CONSTRAINT pagos_tipo_check
+      CHECK (tipo IN ('pago', 'deposito', 'cargo', 'descuento'))
+    `);
+    console.log("✅ Migración pagos_tipo_check: 'descuento' habilitado.");
+  } catch (e) {
+    console.error("⚠️  Migración pagos_tipo_check falló:", e.message);
+  } finally {
+    client.release();
+  }
+})();
 
 server.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);

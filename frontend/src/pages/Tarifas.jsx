@@ -15,7 +15,6 @@ const getAuthHeaders = () => {
 
 const money = (v) => Number(v).toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 
-const PLANES     = ["C1", "GK"];
 const TEMPORADAS = ["base", "alta", "especial"];
 const temporadaLabel = (t) => ({ base: "Base", alta: "Alta", especial: "Especial" }[t] || t);
 const temporadaColor = (t) => ({ base: "secondary", alta: "warning", especial: "info" }[t] || "light");
@@ -28,6 +27,7 @@ const FORM_VACIO = {
 export default function Tarifas() {
   const [tarifas,   setTarifas]   = useState([]);
   const [tipos,     setTipos]     = useState([]);
+  const [planes,    setPlanes]    = useState([]);
   const [cargando,  setCargando]  = useState(false);
   const [error,     setError]     = useState("");
 
@@ -75,7 +75,14 @@ export default function Tarifas() {
     } catch { setTipos([]); }
   };
 
-  useEffect(() => { cargar(); cargarTipos(); }, []);  // eslint-disable-line
+  const cargarPlanes = async () => {
+    try {
+      const { data } = await axios.get(`${API}/api/planes`, { headers: getAuthHeaders() });
+      setPlanes((data || []).filter(p => p.activo));
+    } catch { setPlanes([]); }
+  };
+
+  useEffect(() => { cargar(); cargarTipos(); cargarPlanes(); }, []);  // eslint-disable-line
   const filtrar = () => cargar();
 
   const hf = (k, v) => setForm(p => ({ ...p, [k]: v }));
@@ -178,7 +185,7 @@ export default function Tarifas() {
               <Form.Label className="mb-1">Plan</Form.Label>
               <Form.Select value={fPlan} onChange={e => setFPlan(e.target.value)}>
                 <option value="">Todos</option>
-                {PLANES.map(p => <option key={p} value={p}>{p}</option>)}
+                {planes.map(p => <option key={p.codigo} value={p.codigo}>{p.codigo}{p.descripcion ? ` — ${p.descripcion}` : ""}</option>)}
               </Form.Select>
             </Col>
             <Col md={2}>
@@ -282,8 +289,18 @@ export default function Tarifas() {
             <Col md={5}>
               <Form.Label>Plan *</Form.Label>
               <Form.Select value={form.plan} onChange={e => hf("plan", e.target.value)}>
-                {PLANES.map(p => <option key={p} value={p}>{p}</option>)}
+                <option value="">Seleccione un plan...</option>
+                {planes.map(p => (
+                  <option key={p.codigo} value={p.codigo}>
+                    {p.codigo}{p.descripcion ? ` — ${p.descripcion}` : ""}
+                  </option>
+                ))}
               </Form.Select>
+              {planes.length === 0 && (
+                <div className="text-danger mt-1" style={{ fontSize: 12 }}>
+                  No hay planes activos. Crea uno en Administración → Planes.
+                </div>
+              )}
             </Col>
 
             <Col md={6}>

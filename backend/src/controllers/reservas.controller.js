@@ -545,6 +545,7 @@ export const actualizarReserva = async (req, res) => {
     notas,
     habitacion_numero,
     fuente,
+    plan,
     usuario = "recepcion",
   } = req.body;
 
@@ -650,11 +651,12 @@ export const actualizarReserva = async (req, res) => {
           fecha_fin     = $3,
           estado        = COALESCE($4, estado),
           notas         = COALESCE($5, notas),
+          plan          = COALESCE($7, plan),
           updated_at    = NOW()
       WHERE id = $6
       RETURNING *
       `,
-      [nuevaHabitacionId, nuevoDesde, nuevoHasta, estado, notas, reservaId]
+      [nuevaHabitacionId, nuevoDesde, nuevoHasta, estado, notas, reservaId, plan ?? null]
     );
 
     // HU-R15: guardar fuente si viene
@@ -1273,7 +1275,11 @@ export const obtenerFinanzasReserva = async (req, res) => {
       .filter((p) => p.tipo === "cargo")
       .reduce((acc, p) => acc + Number(p.monto), 0);
 
-    const total_pagado = total_depositos + total_pagos;
+    const total_descuentos = movimientos
+      .filter((p) => p.tipo === "descuento")
+      .reduce((acc, p) => acc + Number(p.monto), 0);
+
+    const total_pagado = total_depositos + total_pagos + total_descuentos;
 
     // 3) Factura (si existe)
     const rFactura = await pool.query(
@@ -1318,6 +1324,7 @@ export const obtenerFinanzasReserva = async (req, res) => {
         total_depositos,
         total_pagos,
         total_cargos,
+        total_descuentos,
         total_pagado,
         total_facturado,
         saldo,
@@ -1587,18 +1594,31 @@ export const previsualizarPrecioReserva = async (req, res) => {
 
   const noches = Math.max(dayjs(h).diff(dayjs(d), "day"), 1);
 
+  // Resolver el tipo: acepta tanto el nombre ("Doble") como el código ("DBL")
+  const tipoRows = await pool.query(
+    `SELECT nombre, codigo FROM tipos_habitacion
+     WHERE lower(trim(nombre)) = lower(trim($1)) OR lower(trim(codigo)) = lower(trim($1))
+     LIMIT 1`,
+    [tipo]
+  );
+  const tipoNombre = tipoRows.rows[0]?.nombre || tipo;
+  const tipoCodigo = tipoRows.rows[0]?.codigo || tipo;
+
   const q = `
     SELECT precio
     FROM tarifas
     WHERE plan = $1
-      AND lower(trim(tipo_habitacion)) = lower(trim($2))
-      AND fecha_inicio <= $3
-      AND fecha_fin >= $4
+      AND (
+        lower(trim(tipo_habitacion)) = lower(trim($2))
+        OR lower(trim(tipo_habitacion)) = lower(trim($3))
+      )
+      AND fecha_inicio <= $4
+      AND fecha_fin >= $5
     ORDER BY fecha_inicio DESC
     LIMIT 1
   `;
 
-  const { rows } = await pool.query(q, [plan, tipo, d, h]);
+  const { rows } = await pool.query(q, [plan, tipoNombre, tipoCodigo, d, h]);
 
   if (!rows.length) {
     return res.status(400).json({
@@ -1618,18 +1638,30 @@ const calcularTarifaSnapshot = async (client, { plan, tipoHabitacion, desde, has
   const h = dayjs(hasta).format("YYYY-MM-DD");
   const noches = Math.max(dayjs(h).diff(dayjs(d), "day"), 1);
 
+  // Resolver tipo por nombre o código
+  const tipoRes = await client.query(
+    `SELECT nombre, codigo FROM tipos_habitacion
+     WHERE lower(trim(nombre)) = lower(trim($1)) OR lower(trim(codigo)) = lower(trim($1)) LIMIT 1`,
+    [tipoHabitacion]
+  );
+  const tNombre = tipoRes.rows[0]?.nombre || tipoHabitacion;
+  const tCodigo = tipoRes.rows[0]?.codigo || tipoHabitacion;
+
   const qTarifa = `
     SELECT precio
     FROM tarifas
     WHERE plan = $1
-      AND lower(trim(tipo_habitacion)) = lower(trim($2))
-      AND fecha_inicio <= $3
-      AND fecha_fin >= $4
+      AND (
+        lower(trim(tipo_habitacion)) = lower(trim($2))
+        OR lower(trim(tipo_habitacion)) = lower(trim($3))
+      )
+      AND fecha_inicio <= $4
+      AND fecha_fin >= $5
     ORDER BY fecha_inicio DESC
     LIMIT 1
   `;
 
-  const rt = await client.query(qTarifa, [plan, tipoHabitacion, d, h]);
+  const rt = await client.query(qTarifa, [plan, tNombre, tCodigo, d, h]);
 
   if (!rt.rows.length) return null;
 
@@ -2189,5 +2221,174 @@ export const generarRegistroHotelero = async (req, res) => {
   } catch (e) {
     console.error("generarRegistroHotelero error:", e);
     res.status(500).json({ message: "Error al generar el registro hotelero." });
+  }
+};
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/reservas/:id/promociones-aplicables
+// Retorna promociones activas que aplican a este plan/tipo/noches/fechas
+// ─────────────────────────────────────────────────────────────────────────────
+export const promocionesAplicables = async (req, res) => {
+  const { id } = req.params;
+  try {
+    // 1) Obtener datos de la reserva
+    const rRes = await pool.query(
+      `SELECT r.id, r.plan, r.fecha_inicio, r.fecha_fin, r.estado,
+              h.tipo AS tipo_habitacion,
+              GREATEST(1, DATE_PART('day', r.fecha_fin::timestamp - r.fecha_inicio::timestamp)::int) AS noches
+       FROM reservas r
+       JOIN habitaciones h ON h.id = r.habitacion_id
+       WHERE r.id = $1 LIMIT 1`,
+      [id]
+    );
+    if (!rRes.rows.length) return res.status(404).json({ message: "Reserva no encontrada." });
+    const reserva = rRes.rows[0];
+
+    if (reserva.estado !== "ocupada") {
+      return res.status(400).json({ message: "Solo se pueden aplicar promociones a reservas en check-in (ocupada)." });
+    }
+
+    // 2) Obtener total alojamiento para calcular descuentos porcentuales
+    const snapR = await pool.query(
+      `SELECT tarifa_snapshot FROM reservas WHERE id = $1`, [id]
+    );
+    let totalAlojamiento = 0;
+    const snap = snapR.rows[0]?.tarifa_snapshot;
+    if (snap) {
+      if (typeof snap === "object" && snap.total) {
+        totalAlojamiento = Number(snap.total);
+      } else if (!isNaN(Number(snap))) {
+        totalAlojamiento = Number(snap);
+      }
+    }
+    // Si no hay snapshot, intentar con tarifas
+    if (!totalAlojamiento) {
+      try {
+        const client = await pool.connect();
+        const calc = await calcularTarifaSnapshot(client, {
+          plan: reserva.plan, tipoHabitacion: reserva.tipo_habitacion,
+          desde: reserva.fecha_inicio, hasta: reserva.fecha_fin
+        });
+        client.release();
+        totalAlojamiento = calc?.total || 0;
+      } catch { totalAlojamiento = 0; }
+    }
+
+    const hoy = dayjs().format("YYYY-MM-DD");
+
+    // 3) Consultar promociones aplicables
+    const pRows = await pool.query(
+      `SELECT * FROM promociones
+       WHERE activa = true
+         AND (plan IS NULL OR plan = $1)
+         AND (tipo_habitacion IS NULL OR lower(trim(tipo_habitacion)) = lower(trim($2)))
+         AND (min_noches IS NULL OR min_noches <= $3)
+         AND (fecha_inicio IS NULL OR fecha_inicio <= $4::date)
+         AND (fecha_fin IS NULL OR fecha_fin >= $4::date)
+       ORDER BY tipo, valor DESC`,
+      [reserva.plan, reserva.tipo_habitacion, reserva.noches, hoy]
+    );
+
+    // 4) Calcular monto descuento para cada promoción
+    const precioNoche = reserva.noches > 0 ? totalAlojamiento / reserva.noches : 0;
+
+    const promociones = pRows.rows.map(p => {
+      let descuento = 0;
+      if (p.tipo === "porcentaje") {
+        descuento = Math.round((Number(p.valor) / 100) * totalAlojamiento);
+      } else if (p.tipo === "monto_fijo") {
+        descuento = Math.min(Number(p.valor), totalAlojamiento);
+      } else if (p.tipo === "noches_gratis") {
+        descuento = Math.round(Number(p.valor) * precioNoche);
+      }
+      return { ...p, total_alojamiento: totalAlojamiento, descuento_calculado: descuento };
+    });
+
+    res.json({ reserva, promociones });
+  } catch (e) {
+    console.error("promocionesAplicables error:", e);
+    res.status(500).json({ message: "Error al obtener promociones aplicables." });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/reservas/:id/aplicar-promocion  { promocion_id }
+// Registra el descuento como movimiento tipo='descuento' en pagos
+// ─────────────────────────────────────────────────────────────────────────────
+export const aplicarPromocion = async (req, res) => {
+  const { id } = req.params;
+  const { promocion_id } = req.body || {};
+
+  if (!promocion_id) return res.status(400).json({ message: "promocion_id es requerido." });
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Verificar reserva ocupada
+    const rRes = await client.query(
+      `SELECT r.id, r.plan, r.fecha_inicio, r.fecha_fin, r.estado, r.tarifa_snapshot,
+              h.tipo AS tipo_habitacion,
+              GREATEST(1, DATE_PART('day', r.fecha_fin::timestamp - r.fecha_inicio::timestamp)::int) AS noches
+       FROM reservas r
+       JOIN habitaciones h ON h.id = r.habitacion_id
+       WHERE r.id = $1 LIMIT 1`, [id]
+    );
+    if (!rRes.rows.length) { await client.query("ROLLBACK"); return res.status(404).json({ message: "Reserva no encontrada." }); }
+    const reserva = rRes.rows[0];
+    if (reserva.estado !== "ocupada") { await client.query("ROLLBACK"); return res.status(400).json({ message: "Solo se puede aplicar a reservas ocupadas (en check-in)." }); }
+
+    // Verificar que la promoción no se haya aplicado ya
+    const yaAplicada = await client.query(
+      `SELECT id FROM pagos WHERE reserva_id = $1 AND tipo = 'descuento' AND referencia LIKE $2`,
+      [id, `%[PROMO-${promocion_id}]%`]
+    );
+    if (yaAplicada.rows.length) { await client.query("ROLLBACK"); return res.status(400).json({ message: "Esta promoción ya fue aplicada a esta reserva." }); }
+
+    // Obtener promoción
+    const pRow = await client.query(`SELECT * FROM promociones WHERE id = $1 AND activa = true LIMIT 1`, [promocion_id]);
+    if (!pRow.rows.length) { await client.query("ROLLBACK"); return res.status(404).json({ message: "Promoción no encontrada o inactiva." }); }
+    const promo = pRow.rows[0];
+
+    // Calcular total alojamiento
+    let totalAlojamiento = 0;
+    const snap = reserva.tarifa_snapshot;
+    if (snap && typeof snap === "object" && snap.total) totalAlojamiento = Number(snap.total);
+    else if (snap && !isNaN(Number(snap))) totalAlojamiento = Number(snap);
+    if (!totalAlojamiento) {
+      const calc = await calcularTarifaSnapshot(client, {
+        plan: reserva.plan, tipoHabitacion: reserva.tipo_habitacion,
+        desde: reserva.fecha_inicio, hasta: reserva.fecha_fin
+      });
+      totalAlojamiento = calc?.total || 0;
+    }
+
+    const precioNoche = reserva.noches > 0 ? totalAlojamiento / reserva.noches : 0;
+    let descuento = 0;
+    if (promo.tipo === "porcentaje") descuento = Math.round((Number(promo.valor) / 100) * totalAlojamiento);
+    else if (promo.tipo === "monto_fijo") descuento = Math.min(Number(promo.valor), totalAlojamiento);
+    else if (promo.tipo === "noches_gratis") descuento = Math.round(Number(promo.valor) * precioNoche);
+
+    if (descuento <= 0) { await client.query("ROLLBACK"); return res.status(400).json({ message: "El descuento calculado es 0. Verifica la tarifa de alojamiento." }); }
+
+    // Insertar descuento como movimiento
+    const ins = await client.query(
+      `INSERT INTO pagos (reserva_id, tipo, metodo, monto, referencia, fecha, created_at)
+       VALUES ($1, 'descuento', 'otro', $2, $3, NOW()::date, NOW())
+       RETURNING *`,
+      [id, descuento, `DESCUENTO: ${promo.nombre} [PROMO-${promo.id}]`]
+    );
+
+    await client.query("COMMIT");
+    return res.status(201).json({
+      movimiento: ins.rows[0],
+      promocion: promo,
+      descuento_aplicado: descuento,
+    });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error("aplicarPromocion error:", e);
+    return res.status(500).json({ message: e.message || "Error al aplicar la promoción." });
+  } finally {
+    client.release();
   }
 };

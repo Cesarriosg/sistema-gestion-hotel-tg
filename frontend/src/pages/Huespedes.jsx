@@ -40,6 +40,8 @@ const FORM_VACIO = {
 export default function Huespedes() {
   // ── Lista ──────────────────────────────────────────────────────────────────
   const [q,         setQ]         = useState("");
+  const [fDesde,    setFDesde]    = useState("");
+  const [fHasta,    setFHasta]    = useState("");
   const [page,      setPage]      = useState(1);
   const limit = 20;
   const [items,     setItems]     = useState([]);
@@ -65,9 +67,13 @@ export default function Huespedes() {
   const cargar = useCallback(async (opts = {}) => {
     try {
       setCargando(true); setError("");
-      const p  = opts.page !== undefined ? opts.page : page;
-      const qq = opts.q    !== undefined ? opts.q    : q;
+      const p  = opts.page  !== undefined ? opts.page  : page;
+      const qq = opts.q     !== undefined ? opts.q     : q;
+      const fd = opts.desde !== undefined ? opts.desde : fDesde;
+      const fh = opts.hasta !== undefined ? opts.hasta : fHasta;
       const params = { q: qq, page: p, limit };
+      if (fd) params.desde = fd;
+      if (fh) params.hasta = fh;
       const r  = await huespedesService.listar(params);
       setItems(r.data.items || []);
       setTotal(Number(r.data.total || 0));
@@ -82,7 +88,7 @@ export default function Huespedes() {
   useEffect(() => { cargar({ page:1 }); }, []); // eslint-disable-line
 
   const buscar  = () => cargar({ page:1 });
-  const limpiar = () => { setQ(""); cargar({ q:"", page:1 }); };
+  const limpiar = () => { setQ(""); setFDesde(""); setFHasta(""); cargar({ q:"", desde:"", hasta:"", page:1 }); };
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -198,7 +204,7 @@ export default function Huespedes() {
 
           {/* ── Filtros ───────────────────────────────────────── */}
           <Row className="g-2 align-items-end mb-3">
-            <Col md={7}>
+            <Col md={4}>
               <Form.Label className="mb-1" style={{ fontSize:13 }}>
                 Búsqueda (nombre, documento, email, teléfono)
               </Form.Label>
@@ -209,7 +215,15 @@ export default function Huespedes() {
                 placeholder="Ej: García / 1006 / correo@..."
               />
             </Col>
-            <Col md={3} className="d-flex gap-2">
+            <Col md={2}>
+              <Form.Label className="mb-1" style={{ fontSize:13 }}>Ingreso desde</Form.Label>
+              <Form.Control type="date" value={fDesde} onChange={e => setFDesde(e.target.value)} />
+            </Col>
+            <Col md={2}>
+              <Form.Label className="mb-1" style={{ fontSize:13 }}>Ingreso hasta</Form.Label>
+              <Form.Control type="date" value={fHasta} onChange={e => setFHasta(e.target.value)} />
+            </Col>
+            <Col md={2} className="d-flex gap-2">
               <Button variant="primary" className="w-100" onClick={buscar} disabled={cargando}>
                 Buscar
               </Button>

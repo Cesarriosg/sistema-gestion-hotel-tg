@@ -21,17 +21,21 @@ import usuariosRoutes        from "./routes/usuarios.routes.js";
 import otasRoutes            from "./routes/otas.routes.js";
 
 import tarifasRoutes         from "./routes/tarifas.routes.js";
+import planesRoutes          from "./routes/planes.routes.js";
 import reportesRoutes        from "./routes/reportes.routes.js";
 
 dotenv.config();
 
 const app = express();
 
-app.use(cors({
+const corsOptions = {
   origin: "http://localhost:3000",
-  methods: "GET,POST,PUT,DELETE,PATCH",
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
-}));
+};
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions)); // preflight para todas las rutas
 
 app.use(express.json());
 
@@ -51,7 +55,8 @@ app.use("/api/auditoria",            auditoriaRoutes);
 app.use("/api/tipos-habitacion",     tiposHabitacionRoutes);
 app.use("/api/usuarios",             usuariosRoutes);
 app.use("/api/otas",                 otasRoutes);
-app.use("/api/tarifas",              tarifasRoutes);  
+app.use("/api/tarifas",              tarifasRoutes);
+app.use("/api/planes",               planesRoutes);
 app.use("/api/reportes",             reportesRoutes); 
 
 export default app;
