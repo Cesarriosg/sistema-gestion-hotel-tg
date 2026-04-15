@@ -92,10 +92,13 @@ export const channexWebhook = async (req, res) => {
     const rooms = bd.rooms || p.rooms || [];
     const room  = rooms[0] || {};
 
-    const fecha_inicio = dayjs(bd.arrival_date   || p.arrival_date).format("YYYY-MM-DD");
-    const noches       = Number(bd.nights         || p.count_of_nights || 1);
-    const fecha_fin    = bd.departure_date
-      ? dayjs(bd.departure_date).format("YYYY-MM-DD")
+    // Extraer solo YYYY-MM-DD sin parsear timezone (Channex envía fechas en UTC+X)
+    const rawInicio = String(bd.arrival_date   || p.arrival_date || "");
+    const rawFin    = String(bd.departure_date || "");
+    const fecha_inicio = rawInicio.slice(0, 10);
+    const noches       = Number(bd.nights || p.count_of_nights || 1);
+    const fecha_fin    = rawFin
+      ? rawFin.slice(0, 10)
       : dayjs(fecha_inicio).add(noches, "day").format("YYYY-MM-DD");
 
     const customer_name = bd.customer?.name || p.customer_name || "Cliente OTA";
