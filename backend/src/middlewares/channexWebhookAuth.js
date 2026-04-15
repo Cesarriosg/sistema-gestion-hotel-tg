@@ -10,17 +10,20 @@ export const verificarChannexWebhook = (req, res, next) => {
   const secret    = process.env.CHANNEX_WEBHOOK_SECRET || "";
 
   if (secret && signature) {
+    // Aceptar comparación directa (clave estática) O HMAC-SHA256
+    if (signature === secret) {
+      return next();
+    }
     const expected = crypto
       .createHmac("sha256", secret)
       .update(JSON.stringify(req.body))
       .digest("hex");
-
     if (signature !== expected) {
       console.warn("⚠️  Channex webhook signature mismatch — rechazado");
       return res.status(401).json({ message: "Webhook signature inválida." });
     }
   }
 
-  // Sin secret configurado → permitir (staging/demo)
+  // Sin secret configurado → permitir (demo)
   next();
 };
