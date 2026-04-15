@@ -397,14 +397,15 @@ useEffect(()=>{
 
   const esHoyDelSistema = (yymmdd) => yymmdd === fechaSistema;
 
+  // Extraer YYYY-MM-DD sin parsear timezone (evita desfase UTC-5 en Colombia)
+  const toDateStr = (fecha) => String(fecha || "").slice(0, 10);
+
   const buildReservaStart = (fechaInicio) =>
-  `${dayjs(fechaInicio).format("YYYY-MM-DD")}T15:00:00`;
+    `${toDateStr(fechaInicio)}T15:00:00`;
 
 const buildReservaEnd = (fechaFin, startISO) => {
-  // checkout 11:00 del día fechaFin
-  let endISO = `${dayjs(fechaFin).format("YYYY-MM-DD")}T11:00:00`;
+  let endISO = `${toDateStr(fechaFin)}T11:00:00`;
 
-  // ✅ si por datos viene fechaFin == fechaInicio (o end <= start), lo corregimos:
   if (!dayjs(endISO).isAfter(dayjs(startISO))) {
     endISO = `${dayjs(startISO).add(1, "day").format("YYYY-MM-DD")}T11:00:00`;
   }
@@ -413,11 +414,10 @@ const buildReservaEnd = (fechaFin, startISO) => {
 };
 
 const buildBloqueoStart = (fechaInicio) =>
-  `${dayjs(fechaInicio).format("YYYY-MM-DD")}T00:00:00`;
+  `${toDateStr(fechaInicio)}T00:00:00`;
 
 const buildBloqueoEnd = (fechaFin, startISO) => {
-  // bloqueos normalmente son [inicio, fin) sin hora, lo dejamos a medianoche
-  let endISO = `${dayjs(fechaFin).format("YYYY-MM-DD")}T00:00:00`;
+  let endISO = `${toDateStr(fechaFin)}T00:00:00`;
 
   // ✅ si end == start, al menos 1 día para que se vea
   if (!dayjs(endISO).isAfter(dayjs(startISO))) {
