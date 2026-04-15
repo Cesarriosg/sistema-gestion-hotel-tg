@@ -223,7 +223,9 @@ function TabConfiguracion() {
       setProperties(r.data || []);
       if (!r.data?.length) setMsg("No se encontraron propiedades en Channex. Verifica tu API key.");
     } catch (e) {
-      setMsg(e?.response?.data?.message || "Error consultando Channex.");
+      const det = e?.response?.data?.detail;
+      const base = e?.response?.data?.message || "Error consultando Channex.";
+      setMsg(det ? `${base} — ${JSON.stringify(det)}` : base);
     } finally { setLoadingProp(false); }
   };
 
