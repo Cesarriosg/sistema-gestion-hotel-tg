@@ -8,7 +8,7 @@ const CHANNEX_BASE = process.env.CHANNEX_API_URL || "https://staging.channex.io/
 const CHANNEX_KEY  = () => (process.env.CHANNEX_API_KEY || "").trim();
 
 const channexHeaders = () => ({
-  "api-key":      CHANNEX_KEY(),
+  "user_token":   CHANNEX_KEY(),
   "Content-Type": "application/json",
 });
 
@@ -135,7 +135,7 @@ export const channexActualizarTarifa = async ({
   fecha_fin,
   precio_noche,
   plan = "C1",
-  reserva_id = null,
+  reserva_id: _reserva_id = null,
 }) => {
   if (!CHANNEX_KEY()) return { ok: false, reason: "no_api_key" };
 

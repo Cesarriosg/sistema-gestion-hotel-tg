@@ -546,7 +546,7 @@ export const channexGetProperties = async (_req, res) => {
   if (!CHANNEX_KEY()) return res.status(400).json({ message: "CHANNEX_API_KEY no configurada." });
   try {
     const r = await axios.get(`${CHANNEX_BASE}/properties`, {
-      headers: { "api-key": CHANNEX_KEY() },
+      headers: { "user_token": CHANNEX_KEY() },
     });
     return res.json(r.data?.data || []);
   } catch (e) {
@@ -564,7 +564,7 @@ export const channexGetRoomTypes = async (req, res) => {
   if (!property_id) return res.status(400).json({ message: "property_id requerido." });
   try {
     const r = await axios.get(`${CHANNEX_BASE}/room_types`, {
-      headers: { "api-key": CHANNEX_KEY() },
+      headers: { "user_token": CHANNEX_KEY() },
       params: { property_id },
     });
     return res.json(r.data?.data || []);
