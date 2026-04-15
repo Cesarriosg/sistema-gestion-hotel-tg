@@ -55,12 +55,6 @@ export const channexWebhook = async (req, res) => {
       req.body?.payload?.booking_revision_id;
 
     const p = req.body?.payload || req.body || {};
-    const ota_reserva_id = p.booking_unique_id || p.ota_code || p.booking_id || booking_revision_id;
-
-    if (!ota_reserva_id) {
-      console.warn("⚠️  Webhook sin ota_reserva_id — ignorado");
-      return;
-    }
 
     // ── Intentar obtener datos completos desde Channex API ──────────────────
     let bookingDetail = null;
@@ -68,7 +62,7 @@ export const channexWebhook = async (req, res) => {
       try {
         const resp = await axios.get(
           `${CHANNEX_BASE}/booking_revisions/${booking_revision_id}`,
-          { headers: { "api-key": CHANNEX_KEY() } }
+          { headers: { "user_token": CHANNEX_KEY() } }
         );
         bookingDetail = resp.data?.data || null;
         console.log("✅ Detalle Channex obtenido:", bookingDetail?.id);
@@ -79,6 +73,22 @@ export const channexWebhook = async (req, res) => {
 
     // ── Normalizar datos al formato interno ────────────────────────────────
     const bd = bookingDetail?.booking || bookingDetail || {};
+
+    // Siempre usar booking_unique_id como ID principal para deduplicar
+    // Si viene del detalle de Channex tiene prioridad máxima
+    const ota_reserva_id =
+      bd.booking_unique_id ||
+      p.booking_unique_id  ||
+      p.ota_code           ||
+      p.booking_id         ||
+      booking_revision_id;
+
+    if (!ota_reserva_id) {
+      console.warn("⚠️  Webhook sin ota_reserva_id — ignorado");
+      return;
+    }
+
+    console.log("🔑 ota_reserva_id:", ota_reserva_id);
     const rooms = bd.rooms || p.rooms || [];
     const room  = rooms[0] || {};
 
