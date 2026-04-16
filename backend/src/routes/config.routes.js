@@ -7,8 +7,9 @@ const router = express.Router();
 //  Obtener fecha del sistema (fecha operativa del hotel)
 router.get("/fecha-sistema", async (req, res) => {
   try {
-    const result = await pool.query("SELECT fecha_sistema FROM configuracion LIMIT 1");
-    res.json({ fecha: result.rows[0].fecha_sistema });
+    // to_char devuelve string 'YYYY-MM-DD' para evitar que pg serialice DATE como timestamp UTC
+    const result = await pool.query("SELECT to_char(fecha_sistema, 'YYYY-MM-DD') AS fecha FROM configuracion LIMIT 1");
+    res.json({ fecha: result.rows[0].fecha });
   } catch (error) {
     console.error("Error al obtener fecha del sistema:", error);
     res.status(500).json({ error: "Error al obtener fecha del sistema" });

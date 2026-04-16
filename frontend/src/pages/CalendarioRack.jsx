@@ -31,12 +31,12 @@ const badgeVariant = (estado) => {
   return "dark";
 };
 
-// rango [inicio, fin)
+// rango [inicio, fin) — usa slice(0,10) para evitar desfase UTC-5 Colombia
 const enRango = (hoy, inicio, fin) => {
-  const H = dayjs(hoy).startOf("day");
-  const I = dayjs(inicio).startOf("day");
-  const F = dayjs(fin).startOf("day");
-  return (H.isSame(I) || H.isAfter(I)) && H.isBefore(F)
+  const H = String(hoy   || "").slice(0, 10);
+  const I = String(inicio || "").slice(0, 10);
+  const F = String(fin    || "").slice(0, 10);
+  return H >= I && H < F;
 };
 
 
@@ -232,7 +232,8 @@ useEffect(()=>{
     setLoadingFecha(true);
     const r = await hotelService.fechaSistema();
 
-    const f = dayjs(r.data.fecha).format("YYYY-MM-DD");
+    // slice(0,10): evita que dayjs parsee el timestamp UTC y lo desfase -5h en Colombia
+    const f = String(r.data.fecha || "").slice(0, 10);
     setFechaSistema(f);
   } catch (e) {
     console.error("Error obteniendo fecha del sistema:", e);
