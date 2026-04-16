@@ -1,7 +1,7 @@
 // src/pages/NuevaReservaLibre.jsx
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem("token");
@@ -12,18 +12,19 @@ const BASE = process.env.REACT_APP_API_URL || "http://localhost:4000";
 
 export default function NuevaReservaLibre() {
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
 
   // selección principal
   const [tipo, setTipo] = useState("");
   const [tipos, setTipos] = useState([]);
   const [plan, setPlan] = useState("");
   const [planes, setPlanes] = useState([]);
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
+  const [desde, setDesde] = useState(searchParams.get("desde") || "");
+  const [hasta, setHasta] = useState(searchParams.get("hasta") || "");
 
   // disponibles
   const [habitacionesDisp, setHabitacionesDisp] = useState([]);
-  const [habNumero, setHabNumero] = useState("");
+  const [habNumero, setHabNumero] = useState(searchParams.get("hab") || "");
 
   // precio
   const [precioNoche, setPrecioNoche] = useState(null);
@@ -45,6 +46,8 @@ export default function NuevaReservaLibre() {
 
   // Cargar tipos de habitación y planes desde la API
   useEffect(() => {
+    const habParam = searchParams.get("hab");
+
     axios.get(`${BASE}/api/tipos-habitacion`, { headers: getAuthHeaders() })
       .then(({ data }) => {
         const activos = (data || []).filter(t => t.activo);
@@ -52,6 +55,7 @@ export default function NuevaReservaLibre() {
         if (activos.length > 0) setTipo(activos[0].nombre);
       })
       .catch(() => {});
+
     axios.get(`${BASE}/api/planes`, { headers: getAuthHeaders() })
       .then(({ data }) => {
         const activos = (data || []).filter(p => p.activo);
@@ -59,6 +63,17 @@ export default function NuevaReservaLibre() {
         if (activos.length > 0) setPlan(activos[0].codigo);
       })
       .catch(() => {});
+
+    // Si vino del rack con una habitacion especifica, obtener su tipo para pre-seleccionarlo
+    if (habParam) {
+      axios.get(`${BASE}/api/habitaciones`, { headers: getAuthHeaders() })
+        .then(({ data }) => {
+          const hab = (data || []).find(h => String(h.numero) === String(habParam));
+          if (hab?.tipo) setTipo(hab.tipo);
+        })
+        .catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const limpiarPrecio = () => {
@@ -94,7 +109,6 @@ export default function NuevaReservaLibre() {
   const cargarDisponibles = async () => {
     setError("");
     setHabitacionesDisp([]);
-    setHabNumero("");
 
     if (!tipo || !desde || !hasta) return;
 
@@ -107,9 +121,11 @@ export default function NuevaReservaLibre() {
 
       setHabitacionesDisp(data || []);
 
-      // Auto-seleccionar la primera disponible
       if (data?.length) {
-        setHabNumero(String(data[0].numero));
+        const habParam = searchParams.get("hab");
+        // Si vino del rack, preferir esa habitación si está disponible
+        const preferida = habParam && data.find(h => String(h.numero) === String(habParam));
+        setHabNumero(String(preferida ? preferida.numero : data[0].numero));
       }
     } catch (e) {
       const msg =

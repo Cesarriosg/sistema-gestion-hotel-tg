@@ -1,7 +1,7 @@
 // src/routes/huespedes.routes.js
 import { Router } from "express";
 import {
-  listarHuespedes,
+  listarHuespedesFiltrados,
   obtenerHuesped,
   crearHuesped,
   actualizarHuesped,
@@ -15,10 +15,10 @@ const router = Router();
 
 // ── Estáticas — SIEMPRE antes de /:id ────────────────────────────────────────
 router.get("/buscar", verificarToken, buscarHuespedPorDocumento);
-router.get("/",       verificarToken, listarHuespedes);
+router.get("/",       verificarToken, listarHuespedesFiltrados);
 
 // ── Con parámetro /:id ────────────────────────────────────────────────────────
-//router.get("/:id/estadias", verificarToken, obtenerEstadiasHuesped);
+router.get("/:id/estadias",  verificarToken, historialHuesped);
 router.get("/:id/historial", verificarToken, historialHuesped);
 router.get("/:id/pagos",    verificarToken, pagosPorHuesped);
 router.get("/:id",           verificarToken, obtenerHuesped);

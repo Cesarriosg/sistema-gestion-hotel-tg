@@ -117,10 +117,13 @@ app.use("/api/promociones", promocionesRoutes);
 
 const PORT = process.env.PORT || 4000;
 
-// Migración: ampliar CHECK constraint de pagos para incluir 'descuento'
+// Migraciones de arranque
 (async () => {
+  let client;
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
+
+    // Migración 1: ampliar CHECK constraint de pagos para incluir 'descuento'
     try {
       await client.query("ALTER TABLE pagos DROP CONSTRAINT IF EXISTS pagos_tipo_check");
       await client.query(`
@@ -128,14 +131,35 @@ const PORT = process.env.PORT || 4000;
         ADD CONSTRAINT pagos_tipo_check
         CHECK (tipo IN ('pago', 'deposito', 'cargo', 'descuento'))
       `);
-      console.log("✅ Migración pagos_tipo_check: 'descuento' habilitado.");
+      console.log("✅ Migración pagos_tipo_check OK.");
     } catch (e) {
       console.error("⚠️  Migración pagos_tipo_check falló:", e.message);
-    } finally {
-      client.release();
     }
+
+    // Migración 2: crear tabla reservas_historial si no existe
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS reservas_historial (
+          id              SERIAL PRIMARY KEY,
+          reserva_id      INTEGER NOT NULL REFERENCES reservas(id) ON DELETE CASCADE,
+          usuario         VARCHAR(100),
+          accion          VARCHAR(100),
+          campo           VARCHAR(100),
+          valor_anterior  TEXT,
+          valor_nuevo     TEXT,
+          notas           TEXT,
+          created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      console.log("✅ Migración reservas_historial OK.");
+    } catch (e) {
+      console.error("⚠️  Migración reservas_historial falló:", e.message);
+    }
+
   } catch (e) {
-    console.error("⚠️  No se pudo conectar para migración (DB no disponible):", e.message);
+    console.error("⚠️  No se pudo conectar para migraciones:", e.message);
+  } finally {
+    if (client) client.release();
   }
 })();
 

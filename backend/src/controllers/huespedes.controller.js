@@ -357,8 +357,9 @@ export const buscarHuespedPorDocumento = async (req, res) => {
 export const listarHuespedesFiltrados = async (req, res) => {
   try {
     const {
-      q = "",               // texto: nombre o documento
-      fecha_ingreso = "",   // YYYY-MM-DD (opcional)
+      q = "",
+      desde = "",   // YYYY-MM-DD — first_ingreso >= desde
+      hasta = "",   // YYYY-MM-DD — first_ingreso <= hasta
       page = "1",
       limit = "20",
     } = req.query;
@@ -368,15 +369,7 @@ export const listarHuespedesFiltrados = async (req, res) => {
     const offset = (pageNum - 1) * limitNum;
 
     const text = String(q || "").trim();
-    const fecha = String(fecha_ingreso || "").trim();
 
-    // 🔎 buscamos por:
-    // - hu.nombre o (nombres+apellidos)
-    // - documento
-    // 📅 fecha_ingreso: primera vez que aparece como titular en una reserva (checkin_at/created_at)
-    //
-    // Nota: si tu sistema ya tiene un campo "created_at" en huespedes y quieres usarlo,
-    // puedes cambiar la parte de fecha por "hu.created_at::date".
     const where = [];
     const params = [];
 
@@ -391,9 +384,14 @@ export const listarHuespedesFiltrados = async (req, res) => {
       `);
     }
 
-    if (fecha) {
-      params.push(fecha);
-      where.push(`first_ingreso::date = $${params.length}::date`);
+    if (desde.trim()) {
+      params.push(desde.trim());
+      where.push(`first_ingreso::date >= $${params.length}::date`);
+    }
+
+    if (hasta.trim()) {
+      params.push(hasta.trim());
+      where.push(`first_ingreso::date <= $${params.length}::date`);
     }
 
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";

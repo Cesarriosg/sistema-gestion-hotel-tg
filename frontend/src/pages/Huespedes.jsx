@@ -99,7 +99,15 @@ export default function Huespedes() {
     setCargandoEst(true);
     try {
       const { data } = await huespedesService.estadias(id);
-      setEstadias(data || []);
+      const reservas = data?.reservas || data || [];
+      const mapped = reservas.map(r => ({
+        ...r,
+        reserva_id: r.id ?? r.reserva_id,
+        noches: r.noches ?? Math.max(0, Math.round(
+          (new Date(r.fecha_fin) - new Date(r.fecha_inicio)) / 86400000
+        )),
+      }));
+      setEstadias(mapped);
     } catch { setEstadias([]); }
     finally { setCargandoEst(false); }
   };
